@@ -1,0 +1,11 @@
+module Util
+    exposing (..)
+
+
+flip f a b = f b a
+
+curry f a b = f (a, b)
+
+uncurry f (a, b) = f a b
+
+dupAsPairs n = ( n , n )
