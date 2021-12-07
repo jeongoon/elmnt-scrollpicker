@@ -140,6 +140,7 @@ lightPalette
        , toElmUiColor
            = ColorUtil.toElmUiColor
       }
+```
 -}
 lightPalette : Palette
 lightPalette

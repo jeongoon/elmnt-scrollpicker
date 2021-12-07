@@ -263,6 +263,7 @@ type Msg vt msg
 
 
 {-| Error used for Task _x_ a
+
 **XXX:** this module doesn't really analyse the error status very well,
 but those data types are only used to explain the code what happened now
 and explain the reason to stop the task.
