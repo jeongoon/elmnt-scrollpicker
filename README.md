@@ -22,12 +22,14 @@ import Dict exposing (Dict)
 import Elmnt.BaseScrollPicker as ScrollPicker
 ```
 
-## Make your own Model and Msg
+## **Make your own Model and Msg**
 
 ```elm
 
     type ExampleMsg
-        = ScrollPickerMessage String (ScrollPicker.Msg Int ExampleMsg)
+        = ScrollPickerMessage String
+          (ScrollPicker.Msg Int ExampleMsg)
+
 ```
 
 Unfortuneately, some states of picker are required to store in
@@ -42,15 +44,20 @@ pickers for hour and minute value.
 
 ```elm
 type alias ExampleModel -- which is your own model
-    = { firstPickerModel  : ScrollPicker.MinimalModel Int ExampleMsg
-      , secondPickerModel : ScrollPicker.MinimalModel Int ExampleMsg
-      , messageMapWith    : String -> (ScrollPicker.Msg Int ExampleMsg) -> ExampleMsg
-      , pickerDirection   : ScrollPicker.Direction -- Horizontal or Vertical
+    = { firstPickerModel
+         : ScrollPicker.MinimalModel Int ExampleMsg
+      , secondPickerModel
+         : ScrollPicker.MinimalModel Int ExampleMsg
+      , messageMapWith
+         : String -> (ScrollPicker.Msg Int ExampleMsg) ->
+           ExampleMsg
+      , pickerDirection
+         : ScrollPicker.Direction -- Horizontal or Vertical
       }
 ```
 
 
-## View
+## **View**
 exampleView shows how to reveal the model on the page by using elm-ui.
 
 check out which settings you can change [`defaultTheme`][defaultTheme]
@@ -67,7 +74,8 @@ exampleView model
 
    in
        layout [ Background.color <|
-                theme.palette.toElmUiColor theme.palette.surface
+                theme.palette.toElmUiColor
+                    theme.palette.surface
               ] <|
            row [ spacing 1
                , centerX
@@ -78,7 +86,7 @@ exampleView model
            ]
 ```
 
-## Model
+## **Model**
 
 [`MinimalModel`][MinimalModel]
 you can still use any other API in the module to work with your own *picker*
@@ -91,17 +99,21 @@ setOptions : (vt -> String) ->
              { state |
                idString  : String
              , optionIds : List String
-             , optionIdToRecordDict : Dict String (Option vt msg)
-             } -> -- At least, those fields are required in the state record
+             , optionIdToRecordDict : Dict String
+                                      (Option vt msg)
+             } -> -- At least, those fields are required
+                  -- in the state record
              { state |
                idString  : String
              , optionIds : List String
-             , optionIdToRecordDict : Dict String (Option vt msg)
-             } --> will return the same structure of the state record
+             , optionIdToRecordDict : Dict String
+                                      (Option vt msg)
+             } --> will return the same structure of
+               --  the state record
 ```
 
 
-## Init
+## **Init**
 Let's initialise our example model. Each picker model(or state) could be
 initialised with [`initMinimalModel`][initMinimalModel] and [`setOptions`][setOptions]
 
@@ -110,38 +122,47 @@ initialised with [`initMinimalModel`][initMinimalModel] and [`setOptions`][setOp
 exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
 exampleInit flags
     = ( { firstPickerModel -- for hour value
-              = ScrollPicker.initMinimalModel "firstScrollPicker"
-                |> ScrollPicker.setOptions
-                   (String.fromInt)
-                   (List.range 1 12
-                      |> List.map
-                         ( \n -> ( n
-                                 , n |> ( String.fromInt >> text )
-                                 )
-                         )
-                   )
-                |> ScrollPicker.setScrollStopCheckTime 75
-                   -- ^ a bit more quicker to check
+              = ScrollPicker.initMinimalModel
+                "firstScrollPicker"
+              |> ScrollPicker.setOptions
+                 (String.fromInt)
+                 (List.range 1 12
+                    |> List.map
+                       ( \n ->
+                            ( n
+                            , n
+                              |> ( String.fromInt >> text )
+                            )
+                       )
+                 )
+              |> ScrollPicker.setScrollStopCheckTime 75
+                 -- ^ a bit more quicker to check
 
         , secondPickerModel -- for minute value
-              = ScrollPicker.initMinimalModel "secondScrollPicker"
-                |> ScrollPicker.setOptions
-                   (String.fromInt)
-                   (List.range 0 59
-                      |> List.map
-                         ( \n -> ( n
-                                 , n |> ( String.fromInt
-                                              >> String.padLeft 2 '0'
-                                              >> text
-                                        )
-                                 )
-                         )
-                   )
+              = ScrollPicker.initMinimalModel
+                "secondScrollPicker"
+              |> ScrollPicker.setOptions
+                 (String.fromInt)
+                 (List.range 0 59
+                    |> List.map
+                       ( \n ->
+                           ( n
+                           , n
+                             |> ( String.fromInt
+                                    >> String.padLeft 2 '0'
+                                    >> text
+                                )
+                           )
+                       )
+                 )
 
         , messageMapWith
             = ScrollPickerMessage
-          -- ^ a map function to wrap the picker messages into the ExampleMsg
-        , pickerDirection = ScrollPicker.Vertical
+          -- ^ a map function to wrap the picker messages
+          --   into the ExampleMsg
+
+        , pickerDirection
+            = ScrollPicker.Vertical
         }              
 ```
 
@@ -151,7 +172,8 @@ In your own update function, you might need to check picker Id and update
 the matched picker state(or model) accordingly.
 
 ```elm
-exampleUpdate : ExampleMsg -> ExampleModel -> ( ExampleModel, Cmd ExampleMsg )
+exampleUpdate : ExampleMsg -> ExampleModel ->
+                ( ExampleModel, Cmd ExampleMsg )
 exampleUpdate msg model
     = let update
               = ScrollPicker.updateWith model
@@ -161,7 +183,8 @@ exampleUpdate msg model
                   case idString of
                       "firstScrollPicker" ->
                           let ( firstPickerModel, cmd )
-                                  = update pickerMsg model.firstPickerModel
+                                  = update pickerMsg
+                                      model.firstPickerModel
 
                               newModel
                                   = { model |
@@ -169,11 +192,13 @@ exampleUpdate msg model
                                           = firstPickerModel
                                     }
                                   
-                          in ( case ScrollPicker.anyNewOptionSelected pickerMsg
-                               of
+                          in ( case ScrollPicker.anyNewOptionSelected
+                                      pickerMsg of
+
                                    Just option ->
                                        { newModel |
-                                         hourValue = option.value
+                                         hourValue
+                                             = option.value
                                        }
                                    Nothing ->
                                        newModel
@@ -182,7 +207,8 @@ exampleUpdate msg model
 
                       "secondScrollPicker" ->
                           let ( secondPickerModel, cmd )
-                                  = update pickerMsg model.secondPickerModel
+                                  = update pickerMsg
+                                      model.secondPickerModel
 
                               newModel
                                   = { model |
@@ -190,11 +216,13 @@ exampleUpdate msg model
                                           = secondPickerModel
                                     }
                                   
-                          in ( case ScrollPicker.anyNewOptionSelected pickerMsg
-                               of
+                          in ( case ScrollPicker.anyNewOptionSelected
+                                      pickerMsg of
+
                                    Just option ->
                                        { newModel |
-                                         minuteValue = option.value
+                                         minuteValue
+                                            = option.value
                                        }
                                    Nothing ->
                                        newModel
@@ -211,7 +239,7 @@ check some message `Elmnt.BasePickerModel.ScrollPickerSuccess`
 **Note:** `anyNewOptionSelected` function can be useful to set new value
 from the picker. you can also check this out from below code.
 
-## View
+## **View**
 
 Here is an example
 
@@ -222,12 +250,17 @@ exampleView model
         theme
             = defaultTheme
 
+        palette
+            = theme.palette
+
         pickerHelper
             = viewScrollPicker model theme
 
    in
-       layout [ Background.color (theme.palette.on.surface -- use same color as shade
-                                      |> theme.palette.toElmUiColor)
+       layout [ Background.color
+                (palette.on.surface 
+                    -- ^ use same color as shade
+                    |> palette.toElmUiColor)
               ] <|
            column [ centerX
                   , centerY
@@ -246,12 +279,13 @@ exampleView model
                               |> truncate
                         )
                     , Font.color
-                          ( theme.palette.secondary
-                                |> theme.palette.toElmUiColor )
+                          ( palette.secondary
+                                |> palette.toElmUiColor )
                     , centerX
                     ] <|
                    text <| "It's " ++
-                       (model.hourValue |> String.fromInt) ++ ":" ++
+                       (model.hourValue |> String.fromInt) ++
+                       ":" ++
                        (model.minuteValue |> String.fromInt )
            ]
 ```
@@ -299,7 +333,8 @@ to check on Apple product.
 # More Information
 **Why elm-style-animation?** [`elm-style-animation`](/packages/mdgriffith/elm-style-animation/latest)
 is not quite designed for low level animation. but you could use the module
-for any other css-style based animation.
+for any other css-style based animation. So you could possibly add other
+animation in your app without any additional module.
 
 [`elm-animation`](/packages/mgold/elm-animation/latest) was also considered,
 and *it is* pretty straight-foward.
