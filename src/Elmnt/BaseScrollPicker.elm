@@ -1,7 +1,51 @@
 module Elmnt.BaseScrollPicker 
-        exposing (..)
+        exposing ( Option
+                 , Direction (..)
+                 , StartEnd (..)
+                 , MinimalState
+                 , Msg
+                 , Error
+                 , BaseTheme
+                 , defaultTheme
+                 --, defaultFontSize
+                 --, defaultBorderWidth
+                 , BaseSettings
+                 --, scrollPosPropertyName
+                 --, scrollPosProperty
+                 --, initPseudoAnimStateHelper
+                 --, initPseudoAnimState
+                 , getOptions
+                 , setOptions
+                 , setScrollStopCheckTime
+                 , unsafeSetScrollCheckTime
+                 , getOptionIdString
+                 , anyNewOptionSelected
+                 , initMinimalState
+                 , viewAsElement
+                 , updateWith
+                 , subscriptionsWith
 
-{-| A module is an implementation of picker by scrolling and basic view type is [`elm-ui`][elm-ui].
+                 -- v  low-level api
+                 , isSnapping
+                 , stopSnapping
+                 , defaultShadeLengthWith
+                 , defaultShadeAttrsWith
+                 , defaultBaseSettingsWith
+                 , Geom
+                 , getCenterPosOf
+                 , partitionOptionsHelper
+                 , getRelPosOfElement
+                 , taskTargetOptionRelPosHelper
+                 , taskGetViewport
+                 , taskGetViewportPosHelper
+                 , toMilliPixel
+                 , fromMilliPixel
+                 , subscriptionsWithHelper
+               )
+
+                    
+
+{-| This module is an implementation of picker by scrolling and basic view type is [`elm-ui`][elm-ui].
 and animation can be done a bit tricky but easily thanks to [`elm-style-animation`][elm-style-animation].
 Due to some non-standard way to hiding scrollbar, [`elm-css`][elm-css] is also required.
 
@@ -9,24 +53,43 @@ Due to some non-standard way to hiding scrollbar, [`elm-css`][elm-css] is also r
 [elm-css] : /packages/rtfeldman/elm-css/latest
 [elm-style-animation] : /packages/mdgriffith/elm-style-animation/latest
 
-# Usage by an Example
+# Type
 
-@docs ExampleMsg, ExampleModel, exampleInit, exampleUpdate, exampleView, exampleSubscriptions, main
+@docs MinimalState, Direction, StartEnd, Option, Msg, Error
 
-# Helper Functions
+# State(picker model) Creation, Modification and Query
 
-@docs initMinimalModel, setOptions
+@docs initMinimalState, setOptions, getOptions, setScrollStopCheckTime, anyNewOptionSelected
 
-# Furhter Information
+# Update
 
-@docs Msg, Option, ScrollablePickerTheme
+@docs updateWith
+
+# Subscriptions
+
+@docs subscriptionsWith
+
+# View
+
+@docs viewAsElement, defaultTheme, BaseTheme, BaseSettings
+
+# Helper functions
+
+@docs getOptionIdString
+
+# Low-level Data types and functions
+
+@docs isSnapping, stopSnapping, unsafeSetScrollCheckTime, defaultShadeLengthWith,
+defaultShadeAttrsWith, defaultBaseSettingsWith, Geom, getCenterPosOf,
+partitionOptionsHelper, getRelPosOfElement, taskTargetOptionRelPosHelper,
+taskGetViewport, taskGetViewportPosHelper, toMilliPixel, fromMilliPixel,
+subscriptionsWithHelper
 
 # FIXME
 
-    - make a helper (Task) function to snap to default value when initialising.
     - add keyboard input support
-
     - font color
+
 -}
 
 import Dict                                     exposing (Dict)
@@ -89,7 +152,7 @@ type alias Option vt msg
       }
     
 
-{-| mainly used for Picker direction
+{-| Picker direction
 -}
 type Direction
     = Horizontal
@@ -104,7 +167,18 @@ type StartEnd
     | End
 
 
+{-| geometry data type which can be seen in 'Browser.Dom.Viewport'
+-}
+type alias Geom
+    = { x : Float
+      , y : Float
+      , width : Float
+      , height : Float
+      }
+
+
 -- -- -- MODEL -- -- --
+
 {-| Provide Minimal model (or state) to work with. most of funciton in 
 this module works well with your own record type generally, as 
 I used more generic type constraint in function definition
@@ -121,7 +195,7 @@ Even though one state value is used, I need to use Animation.style function
 to generate the state which can contain a lot more information
 
 -}
-type alias MinimalModel vt msg
+type alias MinimalState vt msg
     = { idString                : String
       , optionIds               : List String
       , optionIdToRecordDict    : Dict String (Option vt msg)
@@ -204,7 +278,7 @@ type Error
 
 {-| An example settings value type in use here
 -}
-type alias ScrollPickerTheme palette msg
+type alias BaseTheme palette msg
     = { palette           : palette
       , borderWidth       : Theme.Value Int
       , borderColorFn     : Theme.Value (palette -> Color)
@@ -224,23 +298,30 @@ type alias ScrollPickerTheme palette msg
 {-| All setting values are set to Theme.Default, which can be applied to
 scrollPicker function. please see [`exampleView`](#exampleView).
 -}
-scrollPickerDefaultTheme : ScrollPickerTheme Palette msg
-scrollPickerDefaultTheme
+defaultTheme : BaseTheme Palette msg
+defaultTheme
     = let
         df = Theme.Default
       in
-          ScrollPickerTheme
+          BaseTheme
+          --                 1  2  3  4  5  6  7  8  9 10 11 12
           Theme.defaultPalette df df df df df df df df df df df
 
 
+{-|
+-}
 defaultFontSize : Int
 defaultFontSize
     = Util.sizeScaled 8
 
+{-|
+-}
 defaultBorderWidth : Int
 defaultBorderWidth
     = 3
 
+{-| Takes the direction of picker and gives the shade length
+-}
 defaultShadeLengthWith : Direction -> Int
 defaultShadeLengthWith pickerDirection
     = case pickerDirection of
@@ -249,7 +330,9 @@ defaultShadeLengthWith pickerDirection
           Vertical ->
               Util.sizeScaled 8
 
-defaultShadeAttrsWith : (ScrollPickerTheme
+{-| and helper function for shade attributes for elm-ui
+-}
+defaultShadeAttrsWith : (BaseTheme
                              { palette |
                                accent : Color
                              , surface : Color
@@ -281,7 +364,7 @@ defaultShadeAttrsWith theme pickerDirection startEnd
           
         { lengthSetter, widthSetter, shadeLength, borderWidth, pickerWidth }
            = theme
-            |> defaultScrollPickerSettingsWith pickerDirection
+            |> defaultBaseSettingsWith pickerDirection
 
         pickerWidthSetter
             = (px pickerWidth) |> minimum 15 |> widthSetter
@@ -335,9 +418,10 @@ defaultShadeAttrsWith theme pickerDirection startEnd
 
 
 
-{-| more settings for 'viewScrollPicker' and 'defaultShadeAttrsWith'
+{-| More settings for 'view' and 'defaultShadeAttrsWith' mainly
+because that picker has [`Direction`](#Direction)
 -}
-type alias ScrollPickerSettings compatible msg
+type alias BaseSettings compatible msg
     = { lengthSetter            : Length -> Attribute msg
       , widthSetter             : Length -> Attribute msg
       , longitudinalContainer   : List (Attribute msg) -> List (Element msg) ->
@@ -359,17 +443,20 @@ type alias ScrollPickerSettings compatible msg
       , pickerWidth             : Int
       }
                                           
-defaultScrollPickerSettingsWith : Direction ->
-                                  { theme |
-                                    fontSize     : Theme.Value Int
-                                  , borderWidth  : Theme.Value Int
-                                  , shadeLength  : Theme.Value Int
-                                  , pickerLength : Theme.Value Int
-                                  , pickerWidth  : Theme.Value Int
-                                  } ->
-                                  ScrollPickerSettings compatible msg
 
-defaultScrollPickerSettingsWith pickerDirection theme
+{-| Generate setting values for a picker which has `Direction`
+-}
+defaultBaseSettingsWith : Direction ->
+                      { theme |
+                        fontSize     : Theme.Value Int
+                      , borderWidth  : Theme.Value Int
+                      , shadeLength  : Theme.Value Int
+                      , pickerLength : Theme.Value Int
+                      , pickerWidth  : Theme.Value Int
+                      } ->
+                      BaseSettings compatible msg
+
+defaultBaseSettingsWith pickerDirection theme
     = let
         borderWidth
             = theme.borderWidth
@@ -397,7 +484,7 @@ defaultScrollPickerSettingsWith pickerDirection theme
    in
        ( case pickerDirection of
              Horizontal ->
-                 ScrollPickerSettings
+                 BaseSettings
                      width height row "left"
                      { top = 0, bottom = 0
                      , left = borderWidth, right = borderWidth
@@ -406,7 +493,7 @@ defaultScrollPickerSettingsWith pickerDirection theme
                      Css.height Css.overflowX Css.overflowY
   
              Vertical ->
-                 ScrollPickerSettings
+                 BaseSettings
                      height width column "top"
                      { top = borderWidth, bottom = borderWidth
                      , left = 0, right = 0
@@ -448,6 +535,8 @@ initPseudoAnimState : Float ->
 initPseudoAnimState
     = initPseudoAnimStateHelper scrollPosProperty
 
+
+-- -- -- Helper functions for user -- -- --
 
 {-| get a list of Option record data from the whole model by searching
 option ID in a ditionary in the same order of optionID list
@@ -535,6 +624,14 @@ setScrollStopCheckTime milliSeconds
 
 {-| You can test any value -- even under 75 ms -- however which is not recommended
 -}
+unsafeSetScrollCheckTime : Int ->
+                           { state |
+                             scrollStopCheckTime : Int
+                           } ->
+                           { state |
+                             scrollStopCheckTime : Int
+                           }
+
 unsafeSetScrollCheckTime milliSeconds state
     = { state |
         scrollStopCheckTime
@@ -556,6 +653,17 @@ getOptionIdString toStringFn pickerIdString optionValue
        pickerIdString ++ concator ++ (optionValue |> toStringFn)
 
     
+{-| Check the Msg, and return if there is any new selected option
+-}
+anyNewOptionSelected : Msg vt msg -> Maybe (Option vt msg)
+anyNewOptionSelected msg
+    =
+      case msg of
+          ScrollPickerSuccess option ->
+              Just option
+          _ ->
+              Nothing
+
 {-|
 minimal testing function if the picker is snapping to some item
 at the moment
@@ -604,17 +712,17 @@ stopSnapping state
       }
 
 
--- -- -- Helper functions -- -- --
+-- -- -- Helper functions for Internal usage -- -- --
 
 {-| Browser.Dom.Viewport, Browser.Dom.Element share basic record accessor
-like .x  .y  .width  .height getCenterOf function try to get center
+like .x  .y  .width  .height getCenterPosOf function try to get center
 poistion of the some field
 
     ex) to get center 'y' position of viewport, you can try
 
         getCenterPosOf .y .height .viewport aRecord
 -}
-getCenterPosOf : (f1 -> Float) -> (f1 -> Float) -> (rec -> f1) -> rec -> Float
+getCenterPosOf : (Geom -> Float) -> (Geom -> Float) -> (rec -> Geom) -> rec -> Float
 getCenterPosOf posAccessor lengthAccessor boxAccessor record
     = let
         box
@@ -650,14 +758,8 @@ Calulating relative position in Viewport probably be only way to test
 whether the target is correct one or not, however you might need to check 
 around current candidate.
 -}
-partitionOptionsHelper : ( { height : a
-                           , width  : a
-                           , x : number
-                           , y : number } -> Float ) ->
-                         ( { height : a
-                           , width  : a
-                           , x : number
-                           , y : number } -> Float) ->
+partitionOptionsHelper : ( Geom -> Float ) ->
+                         ( Geom -> Float ) ->
                          { state |
                            optionIdToRecordDict :
                                Dict.Dict String (Option vt msg)
@@ -666,15 +768,10 @@ partitionOptionsHelper : ( { height : a
                          { vp |
                            scene :
                                { d |
-                                 height : a
-                               , width : a
+                                 height : Float
+                               , width  : Float
                                }
-                         , viewport :
-                               { height : a
-                               , width  : a
-                               , x : number
-                               , y : number
-                               }
+                         , viewport : Geom
                          } ->
                          (OptionPartition vt msg)
 
@@ -688,7 +785,7 @@ partitionOptionsHelper posAccessor lengthAccessor state viewport
               , y = -1
               , width = viewport.scene.width
               , height = viewport.scene.height
-              } -- to share same signature for lengthAccessor
+              } -- to share same type annotation for lengthAccessor
                 -- (scene itself doesn't have x, y fields)
             |> lengthAccessor
 
@@ -757,10 +854,19 @@ partitionOptionsHelper posAccessor lengthAccessor state viewport
                 |> List.drop 1)
 
 
-{-| get relative position of element in the viewport
+{-| To get relative position of element in the viewport.
+
+you need to apply position accessor and length accessor which are normally
+`.x` and `.width` for Horizontal scroll picker and `.y` and `.height` for
+Vertical scroll picker.
+
 **Note:** the element is got from getElement, viewport is got from getViewport
 -}
-getRelativePosition posAccessor lengthAccessor pos
+getRelPosOfElement : (Geom -> Float) ->
+                     (Geom -> Float) ->
+                     { pos | element : Geom, viewport : Geom } -> Float
+
+getRelPosOfElement posAccessor lengthAccessor pos
     = (pos
         |> getCenterPosOf posAccessor lengthAccessor .element)
       -
@@ -769,11 +875,18 @@ getRelativePosition posAccessor lengthAccessor pos
 
 
 {-| A Task helper function to get relative distance of the item from
-frame. This value has sign, negtative value shows that the item is
+frame which is measured from the center position of each other.
+This value has sign -- negtative value shows that the item is
 left or above the centre of view frame
 -}
-taskTargetOptionRelativePosHelper posAccessor lengthAccessor
-                                  frameIdString optionItemIdString
+taskTargetOptionRelPosHelper : (Geom -> Float) ->
+                               (Geom -> Float) ->
+                               String ->
+                               String ->
+                               Task Error Float
+
+taskTargetOptionRelPosHelper posAccessor lengthAccessor
+                             frameIdString optionItemIdString
 
     = ( (Browser.Dom.getElement frameIdString
              |> Task.mapError DomError
@@ -790,14 +903,26 @@ taskTargetOptionRelativePosHelper posAccessor lengthAccessor
                            , element  = optionDomElement.element
                            }
                  in
-                     getRelativePosition posAccessor lengthAccessor pos
+                     getRelPosOfElement posAccessor lengthAccessor pos
             )
        )
+
+
+{-| Task helper to get viewport of the item id.
+-}
+taskGetViewport : String ->
+                  Task Error Browser.Dom.Viewport
 
 taskGetViewport idString
     = Browser.Dom.getViewportOf idString
     |> Task.mapError DomError
 
+
+{-| Task helper to retreive the position. posAccessor
+-}
+taskGetViewportPosHelper : ( Geom -> Float ) ->
+                           String ->
+                           Task Error Float
 
 taskGetViewportPosHelper posAccessor idString
     = taskGetViewport idString
@@ -805,23 +930,29 @@ taskGetViewportPosHelper posAccessor idString
        (.viewport >> posAccessor >> Task.succeed)
 
 
+{-| An utility which converts an floating value to an integer value which contains
+upto milli of base unit (pixel in this case)
+-}
 toMilliPixel : Float -> Int
 toMilliPixel floatVal
     = floatVal * 1000
     |> truncate
 
+{-| An utility which converts an integer value(which contains up to thousandth value
+of original) to an float value.
+-}
 fromMilliPixel : Int -> Float
 fromMilliPixel milliPixel
     = milliPixel
     |> toFloat
     |> (Util.flip (/)) 1000
 
+
 -- -- -- INIT (Model only; no Cmd) -- -- --
 
 {-| Helper function to initialise the minimal model. You can call 
 [`setOptions`](#setOptions) after this.
-
-    initMinimalModel "myPicker"
+    initMinimalState "myPicker"
         |> setOptions
            String.fromInt
            [ ( 1, Element.text "1" )
@@ -829,10 +960,10 @@ fromMilliPixel milliPixel
            ...
 
 -}
-initMinimalModel : String ->
-                   MinimalModel vt msg
+initMinimalState : String ->
+                   MinimalState vt msg
 
-initMinimalModel idString
+initMinimalState idString
     = { idString
             = idString
       , optionIds
@@ -861,61 +992,46 @@ initMinimalModel idString
 {-| Generating Element with theme setting and state value
 each function only try to some state value in the whole record
 so if you can apply this funciton with additional state you might want to use.
-ScrollPickerTheme DOES NOT use all the color in the Palette. the Colors used
+BaseTheme DOES NOT use all the color in the Palette. the Colors used
 in the theme are 'accent', 'surface', 'background' 'on.background', 'on.surface'.
 
-```
-viewScrollPicker : { model |
-                     messageMapWith : (String -> (Msg vt msg) -> msg)
-                   , pickerDirection : Direction
-                   } ->
-                   (ScrollPickerTheme { palette |
-                                        accent : Color
-                                      , surface : Color
-                                      , background : Color
-                                      , on : { paletteOn |
-                                               background : Color
-                                             , surface    : Color
-                                             }
-                                      , toElmUiColor : Color -> Element.Color
-                                      }
-                                      msg
+```elm
 ...
 ```
 
 This means the color listed above are should be in your own palette at least,
 even though if you are using your own color accessor(function).
 -}
-viewScrollPicker : { model |
-                     messageMapWith : (String -> (Msg vt msg) -> msg)
-                   , pickerDirection : Direction
-                   } ->
-                   (ScrollPickerTheme { palette |
-                                      -- ^ minimal palette to work with.
-                                      --   you should have even if don't use with
-                                      --   your own 'ScrollPickerTheme' settings.
-                                        accent : Color
-                                      , surface : Color
-                                      , background : Color
-                                      , on : { paletteOn |
-                                               background : Color
-                                             , surface    : Color
-                                             }
-                                      , toElmUiColor : Color -> Element.Color
-                                      }
-                        msg
-                   ) ->
-               { state |
-                 idString   : String
-               , optionIds  : List String
-               , optionIdToRecordDict : Dict String (Option vt msg)
-               } ->
-               Element msg
+viewAsElement : { appModel |
+                  messageMapWith : (String -> (Msg vt msg) -> msg)
+                , pickerDirection : Direction
+                } ->
+                ( BaseTheme { palette |
+                              -- ^ minimal palette to work with.
+                              --   you should have even if don't use with
+                              --   your own 'BaseTheme' settings.
+                              accent : Color
+                            , surface : Color
+                            , background : Color
+                            , on : { paletteOn |
+                                     background : Color
+                                   , surface    : Color
+                                   }
+                            , toElmUiColor : Color -> Element.Color
+                            }
+                      msg
+                ) ->
+                { state |
+                  idString   : String
+                , optionIds  : List String
+                , optionIdToRecordDict : Dict String (Option vt msg)
+                } ->
+                Element msg
 
-viewScrollPicker { messageMapWith, pickerDirection } theme model
+viewAsElement { messageMapWith, pickerDirection } theme state
     = let
         messageMap
-            = messageMapWith model.idString
+            = messageMapWith state.idString
 
         { lengthSetter, widthSetter, longitudinalContainer,
           ancherString, windowEdges, centerLateral, cssWidthSetter,
@@ -923,7 +1039,7 @@ viewScrollPicker { messageMapWith, pickerDirection } theme model
           fontSize, borderWidth, shadeLength, pickerWidth, pickerLength } =
 
             theme
-                |> defaultScrollPickerSettingsWith pickerDirection
+                |> defaultBaseSettingsWith pickerDirection
 
 
         getColourWithDefault defFn customFn
@@ -964,25 +1080,30 @@ viewScrollPicker { messageMapWith, pickerDirection } theme model
                     , cssOverFlowLateral Css.hidden
                     ]
 
-              , Html.Styled.Attributes.id model.idString
+              , Html.Styled.Attributes.id state.idString
               , Html.Styled.Events.on "scroll" <|
                   Decode.succeed <| messageMap OnScroll
               ]
 
               -- this isn't consistent solution but I don't want to think more about css
-              -- so I'm going back to elm-ui
+              -- so I'm going back to elm-ui.
               [ ( layoutWith { options = [ Element.noStaticStyleSheet ] }
                       [] <|
 
                       longitudinalContainer
                       [ fill |> widthSetter
                       , pickerLength |> px |> lengthSetter
-                      , fontSize |> Font.size
+                      , Font.size fontSize
+                      , Font.color
+                            ( theme.fontColorFn
+                                |> getColourWithDefault ( .on >> .surface )
+                                |> theme.palette.toElmUiColor
+                            )
                       ]
                       ( List.concat
                             [ [ viewPickerPaddingElement ]
  
-                            , getOptions model
+                            , getOptions state
                                 |> List.map
                                    (\opt ->
                                         el [ opt.idString |> MAttr.id 
@@ -1037,6 +1158,14 @@ viewScrollPicker { messageMapWith, pickerDirection } theme model
 
 -- -- -- UPDATE -- -- --
 
+{-| updateWith function needs your own app model to ask `messageMapWith` and
+ `pickerDirection` from the model. So if you want to use multiple picker,
+you can keep the same information in the same place.
+
+As other update function supposed to do, updateWith also does the job
+described in the [`Msg`](#Msg)
+
+-}
 updateWith : { a |
                messageMapWith : (String -> (Msg vt msg) -> msg)
              , pickerDirection : Direction
@@ -1067,10 +1196,10 @@ updateWith : { a |
              , Cmd msg
              )
        
-updateWith { messageMapWith, pickerDirection } msg model
+updateWith { messageMapWith, pickerDirection } msg state
     = let
         messageMap
-            = messageMapWith model.idString
+            = messageMapWith state.idString
 
         getMaybeAnimProperty animState propName
             -- `elm-style-animation' doesn't seem to supply the low level accessor
@@ -1090,8 +1219,8 @@ updateWith { messageMapWith, pickerDirection } msg model
         partitionOptions
             = partitionOptionsHelper posAccessor lengthAccessor
 
-        taskTargetOptionRelativePos
-            = taskTargetOptionRelativePosHelper posAccessor lengthAccessor
+        taskTargetOptionRelPos
+            = taskTargetOptionRelPosHelper posAccessor lengthAccessor
 
         taskGetViewportPos
             = taskGetViewportPosHelper posAccessor
@@ -1110,7 +1239,7 @@ updateWith { messageMapWith, pickerDirection } msg model
 
 
         isInScrollTraceHelper mp
-            = {-(Debug.log "scroll trace:"-} model.scrollTraceMP{-)-}
+            = {-(Debug.log "scroll trace:"-} state.scrollTraceMP{-)-}
             |> Set.toList
             |> List.map
                -- ^ make distance list
@@ -1137,9 +1266,9 @@ updateWith { messageMapWith, pickerDirection } msg model
                -- we will check the viewport position against the any position
                -- animated during runtime.
 
-               ( model
-               , if model |> isSnapping then
-                     taskGetViewport model.idString
+               ( state
+               , if state |> isSnapping then
+                     taskGetViewport state.idString
                         |> Task.andThen
                            (\vp ->
                                 let vpPos
@@ -1176,13 +1305,13 @@ updateWith { messageMapWith, pickerDirection } msg model
 
            SyncLastScroll clock keepAnimation ->
                ( if keepAnimation then
-                     ( model, Cmd.none )
+                     ( state, Cmd.none )
 
                  else
-                     ( model |> stopSnapping
+                     ( state |> stopSnapping
                      -- v and check the scrolling is stopped after few milli seconds
                      -- to try another snapping
-                     , Process.sleep (toFloat model.scrollStopCheckTime)
+                     , Process.sleep (toFloat state.scrollStopCheckTime)
                         |> Task.andThen
                            (always Time.now)
                         |> Task.perform (messageMap << TriggerSnapping)
@@ -1192,22 +1321,22 @@ updateWith { messageMapWith, pickerDirection } msg model
 
 
            TriggerSnapping now ->
-               if model |> isSnapping then
-                   ( model, Cmd.none )
+               if state |> isSnapping then
+                   ( state, Cmd.none )
 
                else
                    if (Time.posixToMillis
-                           model.lastScrollClock + model.scrollStopCheckTime)
+                           state.lastScrollClock + state.scrollStopCheckTime)
                        <= Time.posixToMillis now
                    then
                        -- scroll is stopped at least during `scrollStopCheckTime'
                        -- : start to snap to approriate option
 
-                       ( model
-                       , taskGetViewport model.idString
+                       ( state
+                       , taskGetViewport state.idString
                            |> Task.andThen
                               ( \vp ->
-                                    let { previousOptions, mbCurrentOption, nextOptions } = partitionOptions model vp
+                                    let { previousOptions, mbCurrentOption, nextOptions } = partitionOptions state vp
                                     in
                                         case mbCurrentOption of
                                             Just firstSample ->
@@ -1239,12 +1368,12 @@ updateWith { messageMapWith, pickerDirection } msg model
                    else
                        -- another scroll happened within "Animation duration"
                        -- wait until new animation ready
-                       ( model, Cmd.none )
+                       ( state, Cmd.none )
 
 
            CheckInitialTargetOption prevOpts currOpt nextOpts ->
-               ( model
-               , taskTargetOptionRelativePos model.idString currOpt.idString
+               ( state
+               , taskTargetOptionRelPos state.idString currOpt.idString
                    |> Task.andThen
                       (\relativePos ->
                            Task.succeed
@@ -1263,7 +1392,7 @@ updateWith { messageMapWith, pickerDirection } msg model
                )
                    
            DetermineTargetOption resCandidates ->
-               ( model
+               ( state
                , case resCandidates of
                      Ok ( candidates, Nothing ) ->
                          -- checking first sample from candidates
@@ -1272,8 +1401,8 @@ updateWith { messageMapWith, pickerDirection } msg model
                          in
                              case mbCandi of
                                  Just candi ->
-                                     taskTargetOptionRelativePos
-                                         model.idString
+                                     taskTargetOptionRelPos
+                                         state.idString
                                          candi.idString
                                              |> Task.andThen
                                                 (\relativePos ->
@@ -1300,10 +1429,10 @@ updateWith { messageMapWith, pickerDirection } msg model
                                                (Result Error (Float, Float)) ->
                                                (Msg vt msg)
  
-                             setTargetOption candi resOfGetStartAndRelativePos
-                                 = case resOfGetStartAndRelativePos of
-                                       Ok (startPos, candiRelativePos) ->
-                                           if abs candiRelativePos <= abs relPos then
+                             setTargetOption candi resOfGetStartAndRelPos
+                                 = case resOfGetStartAndRelPos of
+                                       Ok (startPos, candiRelPos) ->
+                                           if abs candiRelPos <= abs relPos then
                                                    -- compare to previous record
                                                    -- and check next one to decide
                                                    DetermineTargetOption <|
@@ -1314,7 +1443,7 @@ updateWith { messageMapWith, pickerDirection } msg model
                                                           -- but using Task.perform
                                                           , Just
                                                                 ( candi.idString
-                                                                , candiRelativePos
+                                                                , candiRelPos
                                                                 )
                                                           )
                                                else
@@ -1326,10 +1455,10 @@ updateWith { messageMapWith, pickerDirection } msg model
                          in
                              case mbCandi of
                                  Just candi ->
-                                     taskTargetOptionRelativePos
-                                         model.idString candi.idString
+                                     taskTargetOptionRelPos
+                                         state.idString candi.idString
                                          |> Task.map2
-                                            Tuple.pair (model.idString
+                                            Tuple.pair (state.idString
                                                             |> taskGetViewportPos)
                                                
                                          |> Task.attempt
@@ -1338,7 +1467,7 @@ updateWith { messageMapWith, pickerDirection } msg model
                                  Nothing ->
                                      -- no more option
                                      -- use last one as target option
-                                     (model.idString |> taskGetViewportPos)
+                                     (state.idString |> taskGetViewportPos)
                                             |> Task.attempt
                                                (\res ->
                                                     case res of
@@ -1362,7 +1491,7 @@ updateWith { messageMapWith, pickerDirection } msg model
                        |> cleanScrollPos
                in
                    -- set animation 
-                   ( { model |
+                   ( { state |
                        targetIdString
                            = Just idString
 
@@ -1386,12 +1515,12 @@ updateWith { messageMapWith, pickerDirection } msg model
                    )
 
            MoveToTargetOption optionIdString ->
-               ( { model |
+               ( { state |
                    targetIdString
                        = Just optionIdString
                  }
-               , ( taskGetViewportPos model.idString
-                 , taskTargetOptionRelativePos model.idString optionIdString )
+               , ( taskGetViewportPos state.idString
+                 , taskTargetOptionRelPos state.idString optionIdString )
                    |> (Util.uncurry <|
                            Task.map2 Tuple.pair
                       )
@@ -1409,16 +1538,16 @@ updateWith { messageMapWith, pickerDirection } msg model
                )
                    
            ScrollPickerSuccess option ->
-               ( if model.targetIdString == (Just option.idString) then
-                     model |> stopSnapping
+               ( if state.targetIdString == (Just option.idString) then
+                     state |> stopSnapping
                  else
-                     model
+                     state
 
                , Debug.log "success" Cmd.none                -- XXX : need to focus ??
                ) 
 
            ScrollPickerFailure _ ->
-               ( model
+               ( state
                , Cmd.none                -- XXX : maybe log ??
                )
 
@@ -1427,10 +1556,10 @@ updateWith { messageMapWith, pickerDirection } msg model
                    ( newAnimState, animCmd )
                        = Animation.Messenger.update
                                  animMsg
-                                     model.pseudoAnimState
+                                     state.pseudoAnimState
 
                    mbNewViewportPos
-                       = if model |> isSnapping then
+                       = if state |> isSnapping then
                              getMaybeAnimProperty
                              newAnimState scrollPosPropertyName
                                  |> Maybe.map String.toFloat
@@ -1445,11 +1574,11 @@ updateWith { messageMapWith, pickerDirection } msg model
                                    |> toMilliPixel
 
                                scrollTraceMP
-                                   = model.scrollTraceMP
+                                   = state.scrollTraceMP
                                    |> Set.insert newViewportPosMP
 
                            in
-                               ( { model |
+                               ( { state |
                                    pseudoAnimState
                                        = newAnimState
                                  , scrollTraceMP
@@ -1464,17 +1593,17 @@ updateWith { messageMapWith, pickerDirection } msg model
                                  }
                                , Cmd.batch
                                      [ animCmd
-                                     , ( if (model.finalTargetScrollPosMP
+                                     , ( if (state.finalTargetScrollPosMP
                                                 |> isInScrollTraceHelper
                                                 |> List.filter ((==) 0)
                                                 |> List.length            ) > 1 then
                                              --^ found the same position more than
                                              --  once which probably mean
                                              --  the viewport already at the destination
-                                             case model.targetIdString
+                                             case state.targetIdString
                                                     |> Maybe.map
                                                        ((Util.flip Dict.get)
-                                                            model.optionIdToRecordDict)
+                                                            state.optionIdToRecordDict)
                                              of
                                                  Just (Just targetIdString) ->
                                                      Task.succeed <|
@@ -1484,7 +1613,7 @@ updateWith { messageMapWith, pickerDirection } msg model
                                                  _ ->
                                                      Task.fail <|
                                                          InvalidOptionId
-                                                         model.targetIdString
+                                                         state.targetIdString
                                          else
                                              Task.succeed <|
                                                  AnimateSnapping
@@ -1500,7 +1629,7 @@ updateWith { messageMapWith, pickerDirection } msg model
                                      ]
                                )
                        _ ->
-                           ( { model |
+                           ( { state |
                                pseudoAnimState
                                    = newAnimState
                              }
@@ -1509,15 +1638,15 @@ updateWith { messageMapWith, pickerDirection } msg model
 
            -- the Msg wheere acutally move the viewport
            AnimateSnapping scrollPosMP -> -- MP : in Milli Pixel
-               ( model
-               , taskSetViewport model.idString
+               ( state
+               , taskSetViewport state.idString
                    (scrollPosMP |> fromMilliPixel)
                         |> Task.attempt
                            (always <| messageMap NoOp)
                )
 
            NoOp ->
-               ( model, Cmd.none )
+               ( state, Cmd.none )
 
                    
 -- -- -- SUBSCRIPTIONS -- -- --
@@ -1571,9 +1700,6 @@ subscriptionsWith pickerStates model
 {-| This module has -- unfortunately -- internal state so all the message
 required to wrap (or map) to the your own Msg type.
 
-    type ExampleMsg
-        = ScrollPickerMessage String (Msg Int ExampleMsg)
-
 **Note:** Int type in (Msg *Int* ExampleMsg) is the type for options.
 Please Checkout [`Option`](#option) for further information.
 -}
@@ -1590,10 +1716,12 @@ messageMapWith, pickerDirection is used in the [`scrollPicker`](#scrollPicker)
 so it might be handy if you keep the same name.
 -}
 type alias ExampleModel
-    = { firstPickerModel  : MinimalModel Int ExampleMsg
-      , secondPickerModel : MinimalModel Int ExampleMsg
+    = { firstPickerModel  : MinimalState Int ExampleMsg
+      , secondPickerModel : MinimalState Int ExampleMsg
       , messageMapWith    : String -> (Msg Int ExampleMsg) -> ExampleMsg
       , pickerDirection   : Direction
+      , hourValue         : Int
+      , minuteValue       : Int
       }
 
 
@@ -1604,73 +1732,15 @@ onScroll msg
     |> htmlAttribute
 -}                      
 
-{-| Initialise our example model. Each picker model can be initialised with [`initMinimalModel`](#initMinimalModel) and [`setOptions`](#setOptions)
+{-| Initialise our example model. Each picker model can be initialised with [`initMinimalState`](#initMinimalState) and [`setOptions`](#setOptions)
 
-```
-exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
-exampleInit flags
-    = ( { firstPickerModel -- for hour value
-              = initMinimalModel "firstScrollPicker"
-                |> setOptions
-                   (String.fromInt)
-                   (List.range 1 12
-                      |> List.map
-                         ( \n -> ( n
-                                 , n |> ( String.fromInt >> text )
-                                 )
-                         )
-                   )
-                |> setScrollStopCheckTime 75
-
-        , secondPickerModel -- for minute value
-              = initMinimalModel "secondScrollPicker"
-                |> setOptions
-                   (String.fromInt)
-                   (List.range 0 59
-                      |> List.map
-                         ( \n -> ( n
-                                 , n |> ( String.fromInt
-                                              >> String.padLeft 2 '0'
-                                              >> text
-                                        )
-                                 )
-                         )
-                   )
-
-        , messageMapWith = ScrollPickerMessage
-          -- ^ a map function to wrap the picker messages into the ExampleMsg
-        , pickerDirection = Vertical
-        }              
-```
-
-And you might need to set default value for the picker, this is
+And you might need to set default value for the picker.
 how the example does
-
-
-```
-        ...
-        , pickerDirection = Vertical
-        }              
-
-      -- v focus to initial values
-      , [ ( "firstScrollPicker", 5 )
-        , ( "secondScrollPicker" , 32) ]
-        |> List.map
-           ( \(pickerIdString, optionValue) ->
-                 Task.perform identity <|
-                     Task.succeed <| ScrollPickerMessage pickerIdString <|
-                         MoveToTargetOption <| getOptionIdString
-                                               String.fromInt
-                                               pickerIdString optionValue
-           )
-      |> Cmd.batch
-      )
-```
 -}
 exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
 exampleInit flags
     = ( { firstPickerModel -- for hour value
-              = initMinimalModel "firstScrollPicker"
+              = initMinimalState "firstScrollPicker"
                 |> setOptions
                    (String.fromInt)
                    (List.range 1 12
@@ -1683,7 +1753,7 @@ exampleInit flags
                 |> setScrollStopCheckTime 75
 
         , secondPickerModel -- for minute value
-              = initMinimalModel "secondScrollPicker"
+              = initMinimalState "secondScrollPicker"
                 |> setOptions
                    (String.fromInt)
                    (List.range 0 59
@@ -1700,6 +1770,8 @@ exampleInit flags
         , messageMapWith = ScrollPickerMessage
           -- ^ a map function to wrap the picker messages into the ExampleMsg
         , pickerDirection = Vertical
+        , hourValue = 5
+        , minuteValue = 32
         }              
 
       -- v focus to initial values
@@ -1719,36 +1791,6 @@ exampleInit flags
 {-| and inside your update function you can check picker Id and update approriate
 picker model.
 
-```
-exampleUpdate msg model
-    = let update
-              = updateWith model
-      in
-          case msg of
-              ScrollPickerMessage idString pickerMsg ->
-                  case idString of
-                      "firstScrollPicker" ->
-                          let ( firstPickerModel, cmd )
-                                  = update pickerMsg model.firstPickerModel
-                          in ( { model |
-                                 firstPickerModel
-                                     = firstPickerModel
-                               }
-                               , cmd
-                               )
-
-                      "secondScrollPicker" ->
-                          let ( secondPickerModel, cmd )
-                                  = update pickerMsg model.secondPickerModel
-                          in ( { model |
-                                 secondPickerModel
-                                     = secondPickerModel
-                               }
-                             , cmd
-                             )
-                      _ ->
-                          ( model, Cmd.none )
-```
 **Suggestion**: You can put your picker model into Dict or List depends on your
 preference.
 -}
@@ -1763,84 +1805,91 @@ exampleUpdate msg model
                       "firstScrollPicker" ->
                           let ( firstPickerModel, cmd )
                                   = update pickerMsg model.firstPickerModel
-                          in ( { model |
-                                 firstPickerModel
-                                     = firstPickerModel
-                               }
+
+                              newModel
+                                  = { model |
+                                      firstPickerModel
+                                          = firstPickerModel
+                                    }
+                                  
+                          in ( case anyNewOptionSelected pickerMsg of
+                                   Just option ->
+                                       { newModel |
+                                         hourValue = option.value
+                                       }
+                                   Nothing ->
+                                       newModel
                                , cmd
-                               )
+                             )
 
                       "secondScrollPicker" ->
                           let ( secondPickerModel, cmd )
                                   = update pickerMsg model.secondPickerModel
-                          in ( { model |
-                                 secondPickerModel
-                                     = secondPickerModel
-                               }
-                             , cmd
+
+                              newModel
+                                  = { model |
+                                      secondPickerModel
+                                          = secondPickerModel
+                                    }
+                                  
+                          in ( case anyNewOptionSelected pickerMsg of
+                                   Just option ->
+                                       { newModel |
+                                         minuteValue = option.value
+                                       }
+                                   Nothing ->
+                                       newModel
+                               , cmd
                              )
+
                       _ ->
                           ( model, Cmd.none )
 
 {-| exampleView shows how to reveal the model on the page by using elm-ui
-check out which settings you can change [`scrollPickerDefaultTheme`](#scrollPickerDefaultTheme)
-
-```
-exampleView : ExampleModel -> Html ExampleMsg
-exampleView model
-    = let
-        theme
-            = scrollPickerDefaultTheme
-
-        picker
-            = scrollPicker model theme
-
-   in
-       layout [ Background.color <| theme.palette.toElmUiColor theme.palette.surface
-              ] <|
-           row [ spacing 1
-               , centerX
-               , centerY
-               ]
-           [ picker model.firstPickerModel
-           , picker model.secondPickerModel
-           ]
-```
+check out which settings you can change [`defaultTheme`](#defaultTheme)
 -}
 exampleView : ExampleModel -> Html ExampleMsg
 exampleView model
     = let
         theme
-            = scrollPickerDefaultTheme
+            = defaultTheme
 
         pickerHelper
-            = viewScrollPicker model theme
+            = viewAsElement model theme
 
    in
        layout [ Background.color (theme.palette.on.surface -- use same color as shade
                                       |> theme.palette.toElmUiColor)
               ] <|
-           row [ spacing 1
-               , centerX
-               , centerY
-               ]
-           [ pickerHelper model.firstPickerModel
-           , pickerHelper model.secondPickerModel
+           column [ centerX
+                  , centerY
+                  ]
+               [ row [ spacing 1
+                     ]
+                     [ pickerHelper model.firstPickerModel
+                     , pickerHelper model.secondPickerModel
+                     ]
+
+               , el [ MAttr.paddingTop 20
+                    , Font.size
+                        ( defaultFontSize
+                              |> toFloat
+                              |> (*) 0.7
+                              |> truncate
+                        )
+                    , Font.color
+                          ( theme.palette.secondary
+                                |> theme.palette.toElmUiColor )
+                    , centerX
+                    ] <|
+                   text <| "It's " ++
+                       (model.hourValue |> String.fromInt) ++ ":" ++
+                       (model.minuteValue |> String.fromInt )
            ]
  
 
 {-| Scroll picker relies on animation by using elm-style-animation
 so subscriptions is essential to work with this module this is acheived easily.
-
-```
-exampleSubscriptions model
-    = model |>
-      subscriptionsWith
-      [ model.firstPickerModel
-      , model.secondPickerModel
-      ]
-
-```
 -}
 exampleSubscriptions : ExampleModel -> Sub ExampleMsg
 exampleSubscriptions model
@@ -1852,18 +1901,6 @@ exampleSubscriptions model
 
 
 {-| Finally you can make main function with all the functions.
-
-```
-main : Program () ExampleModel ExampleMsg
-main
-    = Browser.element
-      { init = exampleInit
-      , view = exampleView
-      , update = exampleUpdate
-      , subscriptions = exampleSubscriptions
-      }
-
-```
 -}
 main : Program () ExampleModel ExampleMsg
 main
