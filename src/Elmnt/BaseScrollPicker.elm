@@ -49,9 +49,9 @@ module Elmnt.BaseScrollPicker
 and animation can be done a bit tricky but easily thanks to [`elm-style-animation`][elm-style-animation].
 Due to some non-standard way to hiding scrollbar, [`elm-css`][elm-css] is also required.
 
-[elm-ui] : /packages/mdgriffith/elm-ui/latest
-[elm-css] : /packages/rtfeldman/elm-css/latest
-[elm-style-animation] : /packages/mdgriffith/elm-style-animation/latest
+[elm-ui]: /packages/mdgriffith/elm-ui/latest
+[elm-css]: /packages/rtfeldman/elm-css/latest
+[elm-style-animation]: /packages/mdgriffith/elm-style-animation/latest
 
 # Type
 
@@ -70,7 +70,7 @@ Due to some non-standard way to hiding scrollbar, [`elm-css`][elm-css] is also r
 @docs subscriptionsWith
 
 # View
-
+ 
 @docs viewAsElement, defaultTheme, BaseTheme, BaseSettings
 
 # Helper functions
@@ -1849,6 +1849,28 @@ exampleUpdate msg model
 
 {-| exampleView shows how to reveal the model on the page by using elm-ui
 check out which settings you can change [`defaultTheme`](#defaultTheme)
+
+```elm
+exampleView : ExampleModel -> Html ExampleMsg
+exampleView model
+    = let
+        theme
+            = ScrollPicker.defaultTheme
+
+        picker
+            = scrollPicker model theme
+
+   in
+       layout [ Background.color <|
+                theme.palette.toElmUiColor theme.palette.surface
+              ] <|
+           row [ spacing 1
+               , centerX
+               , centerY
+               ]
+           [ picker model.firstPickerModel
+           , picker model.secondPickerModel
+           ]
 -}
 exampleView : ExampleModel -> Html ExampleMsg
 exampleView model

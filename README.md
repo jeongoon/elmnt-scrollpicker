@@ -1,9 +1,16 @@
+[setOptions]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#setOptions
+[initMinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#initMinimalModel
+[defaultTheme]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#defaultTheme
+[MinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#MinimalModel
+[exampleUrl]: https://jeongoon.github.io/examples/7Dec2021.BaseScrollPicker.html
+
 # An Elm-Ui friendly Scroll Picker
 
 `elmnt-scrollpicker` provides an scroll picker with some animation. `elmnt`
 is stands for [`Element`](https://package.elm-lang.org/packages/mdgriffith/elm-ui/latest/)
 so you can use the View(widget) as an element in elm-ui.
 
+[See it in action here.][exampleUrl]
 
 # How to use
 
@@ -13,17 +20,45 @@ so you can use the View(widget) as an element in elm-ui.
 import Elmnt.BaseScrollPicker as ScrollPicker
 ```
 
+## Make your own Model and Msg
+
+```elm
+
+    type ExampleMsg
+        = ScrollPickerMessage String (Msg Int ExampleMsg)
+```
+
+Unfortuneately, some states of picker are required to store in
+internal record. you might need to declare your own message wrapper
+constructor *ScrollPickerMessage* is an wrapper constructor (or map function) to
+create messages which is compatible to your own module message.
+
+
+Let's say we are making a simple time picker, we need two seprate
+pickers for hour and minute value.
+
+
+```elm
+type alias ExampleModel -- which is your own model
+    = { firstPickerModel  : MinimalModel Int ExampleMsg
+      , secondPickerModel : MinimalModel Int ExampleMsg
+      , messageMapWith    : String -> (Msg Int ExampleMsg) -> ExampleMsg
+      , pickerDirection   : Direction -- Horizontal or Vertical
+      }
+```
+
+
 ## View
 exampleView shows how to reveal the model on the page by using elm-ui.
 
-check out which settings you can change [`scrollPickerDefaultTheme`](/packages/Elmnt/BaseScrollPicker#scrollPickerDefaultTheme)
+check out which settings you can change [`defaultTheme`][defaultTheme]
 
 ```elm
 exampleView : ExampleModel -> Html ExampleMsg
 exampleView model
     = let
         theme
-            = scrollPickerDefaultTheme
+            = ScrollPicker.defaultTheme
 
         picker
             = scrollPicker model theme
@@ -42,37 +77,13 @@ exampleView model
 ```
 
 ## Model
-Unfortuneately, some states required to store in a separate record. so
-you might need to declare your own Msg
 
-```elm
-
-    type ExampleMsg
-        = ScrollPickerMessage String (Msg Int ExampleMsg)
-```
-
-*ScrollPickerMessage* is an wrapper function (or map function) to
-create messages which is compatible to your own module message.
-
-Let's say we are making a simple time picker, we need two seprate
-pickers for hour and minute value.
-
-
-```elm
-type alias ExampleModel -- which is your own model
-    = { firstPickerModel  : MinimalModel Int ExampleMsg
-      , secondPickerModel : MinimalModel Int ExampleMsg
-      , messageMapWith    : String -> (Msg Int ExampleMsg) -> ExampleMsg
-      , pickerDirection   : Direction -- Horizontal or Vertical
-      }
-```
-
-[`MinimalModel`](/packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#MinimalModel) is an *minimal* model for each picker. If you need more advanced features,
+[`MinimalModel`][MinimalModel]
 you can still use any other API in the module to work with your own *picker*
-model As most of API use partial record type. for example [`setOptions`][setOptionsJson]
+model As most of API use partial record type. for example [`setOptions`][setOptions]
 function has the definition like below
 
-[setOptions] : /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#setOptions
+
 
 ```elm
 setOptions : (vt -> String) ->
@@ -94,8 +105,7 @@ setOptions : (vt -> String) ->
 Let's initialise our example model. Each picker model(or state) could be
 initialised with [`initMinimalModel`][initMinimalModel] and [`setOptions`][setOptions]
 
-[initMinimalModel] : /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#initMinimalModel
-[setOptions] : /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#setOptions
+
 
 ```elm
 exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
@@ -272,6 +282,16 @@ main
       , subscriptions = exampleSubscriptions
       }
 ```
+
+# Testing Environment
+
+I'm a chef and but still using Linux since 2001. I don't have enough chance
+to check on Apple product.
+
+- Firefox (currently 94.0.1) on Arch linux
+- Vivaldi
+- [`Gnome Web Epiphany`](https://apps.gnome.org/en-GB/app/org.gnome.Epiphany/)
+
 
 # More Information
 **Why elm-style-animation?** [`elm-style-animation`](/packages/mdgriffith/elm-style-animation/latest)

@@ -30,9 +30,9 @@ import Internal.ColorUtil       as ColorUtil
 type alias Palette
     = Palette.Palette
 
-{-| Theme value can be default or custom value.
+{-| Each theme value can be default or custom value.
 
-The function which uses Default value should know how to evaluate or set the default value.
+The function which uses 'Default' value should know how to evaluate or set the default value.
 -}
 type Value a
     = Default
@@ -51,8 +51,24 @@ isDefault val
     
 {-| It works similar to Maybe.withDefault
 
-Helps a function set a value to some variable or field with default value if
+Helps to set a value to some variable or field with default value if
 user does not supply any custom value.
+
+```elm
+        fontSize
+            = Theme.withDefault defaultFontSize theme.fontSize
+```
+
+or
+
+```elm
+        fontSize
+            = theme.fontSize
+            |> Theme.withDefault defaultFontSize
+```
+
+depends on your preference.
+
 -}
 withDefault : a -> Value a -> a
 withDefault default unknownValue
@@ -64,14 +80,66 @@ withDefault default unknownValue
               value
 
 
-{-|
+{-| default palette for [`defaultTheme`](/Elmnt/BaseScrollPicker#defaultTheme) and
+[`viewElement`](/Elmnt/BaseScrollPicker#viewElement)
 -}
 defaultPalette : Palette
 defaultPalette
     = lightPalette
 
-
 {-| Just an example of light palette
+
+```elm
+lightPalette : Palette
+lightPalette
+    = let
+        lowContrast -- lowContrast to `light' : dark colour
+            = Color.rgb255 0xE7 0xE0 0xD0
+        highContrast
+            = Color.rgb255 0x14 0x11 0x11
+
+   in
+       { primary
+             = Color.rgb255 0x3D 0x5A 0x75
+       , secondary
+             = Color.rgb255 0x82 0x8C 0x74
+       , success
+             = Color.rgb255 0x74 0xAC 0x88
+       , info
+             = Color.rgb255 0x7F 0xAE 0xE2
+       , warning
+             = Color.rgb255 0xFC 0xC3 0x5C
+       , danger
+             = Color.rgb255 0xB5 0x05 0x46
+       , accent
+             = Color.rgb255 0x05 0x45 0x76
+       , surface
+             = lowContrast
+       , background
+             = Color.rgb255 0xEC 0xFB 0xED
+
+      , on = { primary
+                   = lowContrast
+             , secondary
+                   = highContrast
+             , success
+                   = lowContrast
+             , info
+                   = highContrast
+             , warning
+                   = lowContrast
+             , danger
+                   = lowContrast
+             , accent
+                   = lowContrast
+             , surface
+                   = highContrast
+             , background
+                   = lowContrast
+             }
+       , toElmUiColor
+           = ColorUtil.toElmUiColor
+      }
 -}
 lightPalette : Palette
 lightPalette
