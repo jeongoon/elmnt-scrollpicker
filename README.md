@@ -1,7 +1,7 @@
-[setOptions]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#setOptions
-[initMinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#initMinimalModel
-[defaultTheme]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#defaultTheme
-[MinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt/BaseSCrollPicker#MinimalModel
+[setOptions]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#setOptions
+[initMinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#initMinimalModel
+[defaultTheme]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#defaultTheme
+[MinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#MinimalModel
 [exampleUrl]: https://jeongoon.github.io/examples/7Dec2021.BaseScrollPicker.html
 
 # An Elm-Ui friendly Scroll Picker
@@ -17,6 +17,8 @@ so you can use the View(widget) as an element in elm-ui.
 ## Import
 
 ```elm
+import Element exposing (..)
+import Dict exposing (Dict)
 import Elmnt.BaseScrollPicker as ScrollPicker
 ```
 
@@ -25,7 +27,7 @@ import Elmnt.BaseScrollPicker as ScrollPicker
 ```elm
 
     type ExampleMsg
-        = ScrollPickerMessage String (Msg Int ExampleMsg)
+        = ScrollPickerMessage String (ScrollPicker.Msg Int ExampleMsg)
 ```
 
 Unfortuneately, some states of picker are required to store in
@@ -40,10 +42,10 @@ pickers for hour and minute value.
 
 ```elm
 type alias ExampleModel -- which is your own model
-    = { firstPickerModel  : MinimalModel Int ExampleMsg
-      , secondPickerModel : MinimalModel Int ExampleMsg
-      , messageMapWith    : String -> (Msg Int ExampleMsg) -> ExampleMsg
-      , pickerDirection   : Direction -- Horizontal or Vertical
+    = { firstPickerModel  : ScrollPicker.MinimalModel Int ExampleMsg
+      , secondPickerModel : ScrollPicker.MinimalModel Int ExampleMsg
+      , messageMapWith    : String -> (ScrollPicker.Msg Int ExampleMsg) -> ExampleMsg
+      , pickerDirection   : ScrollPicker.Direction -- Horizontal or Vertical
       }
 ```
 
@@ -61,7 +63,7 @@ exampleView model
             = ScrollPicker.defaultTheme
 
         picker
-            = scrollPicker model theme
+            = scrollPicker.viewAsElement model theme
 
    in
        layout [ Background.color <|
@@ -82,8 +84,6 @@ exampleView model
 you can still use any other API in the module to work with your own *picker*
 model As most of API use partial record type. for example [`setOptions`][setOptions]
 function has the definition like below
-
-
 
 ```elm
 setOptions : (vt -> String) ->
@@ -106,13 +106,12 @@ Let's initialise our example model. Each picker model(or state) could be
 initialised with [`initMinimalModel`][initMinimalModel] and [`setOptions`][setOptions]
 
 
-
 ```elm
 exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
 exampleInit flags
     = ( { firstPickerModel -- for hour value
-              = initMinimalModel "firstScrollPicker"
-                |> setOptions
+              = ScrollPicker.initMinimalModel "firstScrollPicker"
+                |> ScrollPicker.setOptions
                    (String.fromInt)
                    (List.range 1 12
                       |> List.map
@@ -121,11 +120,12 @@ exampleInit flags
                                  )
                          )
                    )
-                |> setScrollStopCheckTime 75
+                |> ScrollPicker.setScrollStopCheckTime 75
+                   -- ^ a bit more quicker to check
 
         , secondPickerModel -- for minute value
-              = initMinimalModel "secondScrollPicker"
-                |> setOptions
+              = ScrollPicker.initMinimalModel "secondScrollPicker"
+                |> ScrollPicker.setOptions
                    (String.fromInt)
                    (List.range 0 59
                       |> List.map
@@ -138,9 +138,10 @@ exampleInit flags
                          )
                    )
 
-        , messageMapWith = ScrollPickerMessage
+        , messageMapWith
+            = ScrollPickerMessage
           -- ^ a map function to wrap the picker messages into the ExampleMsg
-        , pickerDirection = Vertical
+        , pickerDirection = ScrollPicker.Vertical
         }              
 ```
 
@@ -153,7 +154,7 @@ the matched picker state(or model) accordingly.
 exampleUpdate : ExampleMsg -> ExampleModel -> ( ExampleModel, Cmd ExampleMsg )
 exampleUpdate msg model
     = let update
-              = updateWith model
+              = ScrollPicker.updateWith model
       in
           case msg of
               ScrollPickerMessage idString pickerMsg ->
@@ -168,7 +169,8 @@ exampleUpdate msg model
                                           = firstPickerModel
                                     }
                                   
-                          in ( case anyNewOptionSelected pickerMsg of
+                          in ( case ScrollPicker.anyNewOptionSelected pickerMsg
+                               of
                                    Just option ->
                                        { newModel |
                                          hourValue = option.value
@@ -188,7 +190,8 @@ exampleUpdate msg model
                                           = secondPickerModel
                                     }
                                   
-                          in ( case anyNewOptionSelected pickerMsg of
+                          in ( case ScrollPicker.anyNewOptionSelected pickerMsg
+                               of
                                    Just option ->
                                        { newModel |
                                          minuteValue = option.value
@@ -237,7 +240,7 @@ exampleView model
 
                , el [ MAttr.paddingTop 20
                     , Font.size
-                        ( defaultFontSize
+                        ( ScrollPicker.defaultFontSize
                               |> toFloat
                               |> (*) 0.7
                               |> truncate

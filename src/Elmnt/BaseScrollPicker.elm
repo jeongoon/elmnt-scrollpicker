@@ -49,6 +49,9 @@ module Elmnt.BaseScrollPicker
 and animation can be done a bit tricky but easily thanks to [`elm-style-animation`][elm-style-animation].
 Due to some non-standard way to hiding scrollbar, [`elm-css`][elm-css] is also required.
 
+**Note:** Type annotation is probably too long to see. However, it might be useful if you
+want add some feature with your own picker model.
+
 [elm-ui]: /packages/mdgriffith/elm-ui/latest
 [elm-css]: /packages/rtfeldman/elm-css/latest
 [elm-style-animation]: /packages/mdgriffith/elm-style-animation/latest
@@ -230,6 +233,37 @@ There are examples in this module regarding message mapping
 you could possibly search keyword 'messageMap' where I need to map the
 `Msg' into `msg'
 
+```elm
+type Msg vt msg
+    = SyncLastScroll            Time.Posix Bool
+    | OnScroll
+    | TriggerSnapping           Time.Posix
+    | CheckInitialTargetOption  (List (Option vt msg))
+                                -- ^ options before the sample
+                                (Option vt msg)
+                                -- ^ initial sample to check
+                                (List (Option vt msg))
+                                -- ^ options after the sample
+
+    | DetermineTargetOption     (Result Error (List (Option vt msg)
+                                               --^  other candidates
+                                              , Maybe ( String
+                                                --^ current name of closest
+                                                --  Option
+                                                      , Float )
+                                                --^ current closest position
+                                                --  of an Option
+                                              )
+                                )
+
+    | SetSnapToTargetOption     String Float Float  --> id and relative position
+    | MoveToTargetOption        String
+    | ScrollPickerSuccess       (Option vt msg)
+    | ScrollPickerFailure       Error
+    | Animate                   Animation.Msg
+    | AnimateSnapping           Int
+    | NoOp
+```
 -}
 type Msg vt msg
     = SyncLastScroll            Time.Posix Bool
@@ -296,7 +330,30 @@ type alias BaseTheme palette msg
 
 
 {-| All setting values are set to Theme.Default, which can be applied to
-scrollPicker function. please see [`exampleView`](#exampleView).
+scrollPicker function.
+
+```elm
+exampleView : ExampleModel -> Html ExampleMsg
+exampleView model
+    = let
+        theme
+            = defaultTheme
+
+        picker
+            = scrollPicker model theme
+
+   in
+       layout [ Background.color <|
+                theme.palette.toElmUiColor theme.palette.surface
+              ] <|
+           row [ spacing 1
+               , centerX
+               , centerY
+               ]
+           [ picker model.firstPickerModel
+           , picker model.secondPickerModel
+           ]
+
 -}
 defaultTheme : BaseTheme Palette msg
 defaultTheme
@@ -952,12 +1009,15 @@ fromMilliPixel milliPixel
 
 {-| Helper function to initialise the minimal model. You can call 
 [`setOptions`](#setOptions) after this.
+
+```elm
     initMinimalState "myPicker"
         |> setOptions
            String.fromInt
            [ ( 1, Element.text "1" )
            , ( 2, Element.text "2" )
            ...
+```
 
 -}
 initMinimalState : String ->
@@ -1851,27 +1911,6 @@ exampleUpdate msg model
 {-| exampleView shows how to reveal the model on the page by using elm-ui
 check out which settings you can change [`defaultTheme`](#defaultTheme)
 
-```elm
-exampleView : ExampleModel -> Html ExampleMsg
-exampleView model
-    = let
-        theme
-            = ScrollPicker.defaultTheme
-
-        picker
-            = scrollPicker model theme
-
-   in
-       layout [ Background.color <|
-                theme.palette.toElmUiColor theme.palette.surface
-              ] <|
-           row [ spacing 1
-               , centerX
-               , centerY
-               ]
-           [ picker model.firstPickerModel
-           , picker model.secondPickerModel
-           ]
 -}
 exampleView : ExampleModel -> Html ExampleMsg
 exampleView model
