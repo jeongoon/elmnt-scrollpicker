@@ -1,10 +1,11 @@
-# An Elm-Ui frienly Scroll Picker
+# An Elm-Ui friendly Scroll Picker
 
 `elmnt-scrollpicker` provides an scroll picker with some animation. `elmnt`
 is stands for [`Element`](https://package.elm-lang.org/packages/mdgriffith/elm-ui/latest/)
 so you can use the View(widget) as an element in elm-ui.
 
-# Tutorial
+
+# How to use
 
 ## Import
 
@@ -246,6 +247,31 @@ exampleView model
 
 Scroll picker relies on animation by using elm-style-animation and subscriptions is
 essential to see actual animation on going now.
+
+```elm
+exampleSubscriptions : ExampleModel -> Sub ExampleMsg
+exampleSubscriptions model
+    = model |>
+      subscriptionsWith
+      [ model.firstPickerModel
+      , model.secondPickerModel
+      ]
+```
+
+## Main
+
+Finally you can make main funciton with all the function above.
+
+```elm
+main : Program () ExampleModel ExampleMsg
+main
+    = Browser.element
+      { init = exampleInit
+      , view = exampleView
+      , update = exampleUpdate
+      , subscriptions = exampleSubscriptions
+      }
+```
 
 # More Information
 **Why elm-style-animation?** [`elm-style-animation`](/packages/mdgriffith/elm-style-animation/latest)

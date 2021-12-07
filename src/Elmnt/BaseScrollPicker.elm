@@ -88,7 +88,6 @@ subscriptionsWithHelper
 # FIXME
 
     - add keyboard input support
-    - font color
 
 -}
 
@@ -1670,7 +1669,9 @@ subscriptionsWithHelper animMessageMapWith pickerRecords
     |> Sub.batch
     
 
-{-| Passing our 'Animation.Messenger.State msg' through subscriptions from elm-style-animation. because it involves with animation otherwise animation will not work at all!
+{-| Passing our 'Animation.Messenger.State msg' through subscriptions
+from elm-style-animation. because it involves with animation otherwise
+animation will not work at all!
 -}
 subscriptionsWith : List { state |
                            idString                 : String
@@ -1732,7 +1733,8 @@ onScroll msg
     |> htmlAttribute
 -}                      
 
-{-| Initialise our example model. Each picker model can be initialised with [`initMinimalState`](#initMinimalState) and [`setOptions`](#setOptions)
+{-| Initialise our example model. Each picker model can be initialised with
+[`initMinimalState`](#initMinimalState) and [`setOptions`](#setOptions)
 
 And you might need to set default value for the picker.
 how the example does
@@ -1900,7 +1902,7 @@ exampleSubscriptions model
       ]
 
 
-{-| Finally you can make main function with all the functions.
+{-| Finally you can make main function with all the functions associated.
 -}
 main : Program () ExampleModel ExampleMsg
 main
