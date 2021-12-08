@@ -1,12 +1,12 @@
-[setOptions]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#setOptions
-[initMinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#initMinimalModel
-[setScrollStopCheckTime]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#setScrollStopCheckTime
-[subscriptionsWith]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#subscriptionsWith
-[defaultTheme]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#defaultTheme
-[MinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#MinimalModel
-[Option]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#Option
-[Msg]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#Msg
-[anyNewOptionSelected]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#anyNewOptionSelected
+[setOptions]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#setOptions
+[initMinimalState]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#initMinimalState
+[setScrollStopCheckTime]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#setScrollStopCheckTime
+[subscriptionsWith]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#subscriptionsWith
+[defaultTheme]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#defaultTheme
+[MinimalState]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#MinimalState
+[Option]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#Option
+[Msg]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#Msg
+[anyNewOptionSelected]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#anyNewOptionSelected
 [exampleUrl]: https://jeongoon.github.io/examples/7Dec2021.BaseScrollPicker.html
 
 # An Elm-Ui friendly Scroll Picker
@@ -33,7 +33,7 @@ import Elmnt.BaseScrollPicker as ScrollPicker
                                  -- ^ or as you'd like
 ```
 
-## **Make your own Model and Msg**
+## Make your own Model and Msg
 
 ```elm
 type AppMsg
@@ -43,7 +43,7 @@ type AppMsg
 
 ScrollPicker.Msg type involves the type of Your own message (AppMsg)
 and also the type of options that we'd like to pick from.
-`Int` is used for [`Option`][Option].
+`Int` is used for [`Option`][Option] in this case.
 
 Some states of picker are required to store in internal record.
 you might need to declare your own message wrapper
@@ -59,9 +59,9 @@ go for it!
 ```elm
 type alias Model -- which is your own model
     = { firstPickerState
-         : ScrollPicker.MinimalModel Int AppMsg
+         : ScrollPicker.MinimalState Int AppMsg
       , secondPickerState
-         : ScrollPicker.MinimalModel Int AppMsg
+         : ScrollPicker.MinimalState Int AppMsg
       , messageMapWith
          : String -> (ScrollPicker.Msg Int AppMsg) ->
            AppMsg
@@ -73,14 +73,16 @@ type alias Model -- which is your own model
 
 ## Model
 
-[`MinimalModel`][MinimalModel]
-you can still use any other API in the module to work with your own *picker*
-model As most of API use partial record type. for example [`setOptions`][setOptions]
-function has the definition like below.
+[`MinimalState`][MinimalState] shows the minimal states required to work
+as a scroll picker. And even if you put *more* fields in your record,
+all the function will still works with yours. Because the most of API
+use partial record annotation.
+
+For example [`setOptions`][setOptions] function has the definition like below.
 
 ```elm
 setOptions
-    : (vt -> String) ->
+    : (vt -> String) -> -- vt stands for 'value type'
       List (vt, Element msg) ->
       { state |
         idString  : String
@@ -98,14 +100,12 @@ setOptions
         --  the state record
   ```
 
-The benifit of long signature is that hen you try to extend model and
-add more features(functions), those functions are stil working
-with your own model.
+which makes setOptions can be provided with a subset of MinimalState.
 
 
 ## Init
 Let's initialise our example model. Each picker model(or state) could be
-initialised with functions such as [`initMinimalModel`][initMinimalModel],
+initialised with functions such as [`initMinimalState`][initMinimalState],
 [`setOptions`][setOptions] and [`setScrollStopCheckTime`][setScrollStopCheckTime]
 
 
@@ -113,7 +113,7 @@ initialised with functions such as [`initMinimalModel`][initMinimalModel],
 exampleInit : () -> ( Model, Cmd AppMsg )
 exampleInit flags
     = ( { firstPickerState -- for hour value
-              = ScrollPicker.initMinimalModel
+              = ScrollPicker.initMinimalState
                 "firstScrollPicker" -- id
               |> ScrollPicker.setOptions
                  (String.fromInt)
@@ -130,7 +130,7 @@ exampleInit flags
                  -- ^ a bit more quicker to check
 
         , secondPickerState -- for minute value
-              = ScrollPicker.initMinimalModel
+              = ScrollPicker.initMinimalState
                 "secondScrollPicker"
               |> ScrollPicker.setOptions
                  (String.fromInt)
@@ -260,7 +260,12 @@ exampleView model
                      , pickerHelper model.secondPickerState
                      ]
 
-               , el [ MAttr.paddingTop 20
+               , el [ paddingEach
+                        { top : 20
+                        , right: 0
+                        , bottom: 0
+                        , left : 0
+                        }
                     , Font.size
                         ( ScrollPicker.defaultFontSize
                               |> toFloat
@@ -319,9 +324,9 @@ main
 - Vivaldi
 - [`Gnome Web Epiphany`](https://apps.gnome.org/en-GB/app/org.gnome.Epiphany/)
 
-I'm a chef and not professional programmer but am still using Linux since 2001.
-my 8 years old laptop can only run Linux smoothly. And I don't have enough
-chance to check things on Apple product, either.
+I'm a chef and not a professional programmer but have been still using Linux
+since 2001. My 8 years old laptop can only run Linux smoothly.
+And I don't have enough chance to check things on Apple product, either.
 
 so, if you need more techincal support on other platform, please contribute
 your solution.

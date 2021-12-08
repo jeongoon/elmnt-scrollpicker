@@ -57,7 +57,7 @@ want add some feature with your own picker model.
 [elm-style-animation]: /packages/mdgriffith/elm-style-animation/latest
 [exampleUpdate]: /packages/jeongoon/elmnt-scrollpicker/latest/#Update
 
-# **Type**
+# Type
 
 @docs MinimalState, Direction, StartEnd, Option, Msg, Error
 
@@ -65,11 +65,11 @@ want add some feature with your own picker model.
 
 @docs initMinimalState, setOptions, getOptions, setScrollStopCheckTime, anyNewOptionSelected
 
-# **Update**
+# Update
 
 @docs updateWith
 
-# **Subscriptions**
+# Subscriptions
 
 @docs subscriptionsWith
 
@@ -1959,8 +1959,13 @@ exampleView model
                     , centerX
                     ] <|
                    text <| "It's " ++
-                       (model.hourValue |> String.fromInt) ++ ":" ++
-                       (model.minuteValue |> String.fromInt )
+                       ( model.hourValue
+                             |> String.fromInt
+                       ) ++ ":" ++
+                       ( model.minuteValue
+                             |> String.fromInt
+                             |> String.padLeft 2 '0'
+                       )
            ]
  
 
