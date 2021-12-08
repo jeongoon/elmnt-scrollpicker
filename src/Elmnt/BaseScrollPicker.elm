@@ -3,7 +3,7 @@ module Elmnt.BaseScrollPicker
                  , Direction (..)
                  , StartEnd (..)
                  , MinimalState
-                 , Msg
+                 , Msg (..)
                  , Error
                  , BaseTheme
                  , defaultTheme
@@ -1791,8 +1791,8 @@ messageMapWith, pickerDirection is used in the [`scrollPicker`](#scrollPicker)
 so it might be handy if you keep the same name.
 -}
 type alias ExampleModel
-    = { firstPickerModel  : MinimalState Int ExampleMsg
-      , secondPickerModel : MinimalState Int ExampleMsg
+    = { firstPickerState  : MinimalState Int ExampleMsg
+      , secondPickerState : MinimalState Int ExampleMsg
       , messageMapWith    : String -> (Msg Int ExampleMsg) -> ExampleMsg
       , pickerDirection   : Direction
       , hourValue         : Int
@@ -1815,7 +1815,7 @@ how the example does
 -}
 exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
 exampleInit flags
-    = ( { firstPickerModel -- for hour value
+    = ( { firstPickerState -- for hour value
               = initMinimalState "firstScrollPicker"
                 |> setOptions
                    (String.fromInt)
@@ -1828,7 +1828,7 @@ exampleInit flags
                    )
                 |> setScrollStopCheckTime 75
 
-        , secondPickerModel -- for minute value
+        , secondPickerState -- for minute value
               = initMinimalState "secondScrollPicker"
                 |> setOptions
                    (String.fromInt)
@@ -1879,13 +1879,13 @@ exampleUpdate msg model
               ScrollPickerMessage idString pickerMsg ->
                   case idString of
                       "firstScrollPicker" ->
-                          let ( firstPickerModel, cmd )
-                                  = update pickerMsg model.firstPickerModel
+                          let ( firstPickerState, cmd )
+                                  = update pickerMsg model.firstPickerState
 
                               newModel
                                   = { model |
-                                      firstPickerModel
-                                          = firstPickerModel
+                                      firstPickerState
+                                          = firstPickerState
                                     }
                                   
                           in ( case anyNewOptionSelected pickerMsg of
@@ -1899,13 +1899,13 @@ exampleUpdate msg model
                              )
 
                       "secondScrollPicker" ->
-                          let ( secondPickerModel, cmd )
-                                  = update pickerMsg model.secondPickerModel
+                          let ( secondPickerState, cmd )
+                                  = update pickerMsg model.secondPickerState
 
                               newModel
                                   = { model |
-                                      secondPickerModel
-                                          = secondPickerModel
+                                      secondPickerState
+                                          = secondPickerState
                                     }
                                   
                           in ( case anyNewOptionSelected pickerMsg of
@@ -1942,8 +1942,8 @@ exampleView model
                   ]
                [ row [ spacing 1
                      ]
-                     [ pickerHelper model.firstPickerModel
-                     , pickerHelper model.secondPickerModel
+                     [ pickerHelper model.firstPickerState
+                     , pickerHelper model.secondPickerState
                      ]
 
                , el [ MAttr.paddingTop 20
@@ -1978,8 +1978,8 @@ exampleSubscriptions model
     = Sub.batch
       [ model
           |> subscriptionsWith
-             [ model.firstPickerModel
-             , model.secondPickerModel
+             [ model.firstPickerState
+             , model.secondPickerState
              ]
       ]
 
