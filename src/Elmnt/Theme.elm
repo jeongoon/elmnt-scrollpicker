@@ -10,6 +10,9 @@ module Elmnt.Theme
 {-| This module provides default / custom value data type and shows an example of
 'Palette' type with 'Color'
 
+[defaultTheme]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#defaultTheme
+[viewAsElement]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseScrollPicker#viewAsElement
+
 # Default / Custom value
 
 @docs Value, isDefault, withDefault
@@ -56,7 +59,8 @@ user does not supply any custom value.
 
 ```elm
         fontSize
-            = Theme.withDefault defaultFontSize theme.fontSize
+            = Theme.withDefault
+                  defaultFontSize theme.fontSize
 ```
 
 or
@@ -80,8 +84,8 @@ withDefault default unknownValue
               value
 
 
-{-| default palette for [`defaultTheme`](/Elmnt/BaseScrollPicker#defaultTheme) and
-[`viewElement`](/Elmnt/BaseScrollPicker#viewElement)
+{-| default palette for [`defaultTheme`][defaultTheme] and
+[`viewElement`][viewAsElement]
 -}
 defaultPalette : Palette
 defaultPalette
@@ -93,7 +97,8 @@ defaultPalette
 lightPalette : Palette
 lightPalette
     = let
-        lowContrast -- lowContrast to `light' : dark colour
+        lowContrast
+         -- ^ lowContrast to `light' : dark colour
             = Color.rgb255 0xE7 0xE0 0xD0
         highContrast
             = Color.rgb255 0x14 0x11 0x11

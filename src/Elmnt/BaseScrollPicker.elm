@@ -55,20 +55,21 @@ want add some feature with your own picker model.
 [elm-ui]: /packages/mdgriffith/elm-ui/latest
 [elm-css]: /packages/rtfeldman/elm-css/latest
 [elm-style-animation]: /packages/mdgriffith/elm-style-animation/latest
+[exampleUpdate]: /packages/jeongoon/elmnt-scrollpicker/latest/#Update
 
-# Type
+# **Type**
 
 @docs MinimalState, Direction, StartEnd, Option, Msg, Error
 
-# State(picker model) Creation, Modification and Query
+# **State(picker model) Creation, Modification and Query**
 
 @docs initMinimalState, setOptions, getOptions, setScrollStopCheckTime, anyNewOptionSelected
 
-# Update
+# **Update**
 
 @docs updateWith
 
-# Subscriptions
+# **Subscriptions**
 
 @docs subscriptionsWith
 
@@ -143,8 +144,9 @@ import Internal.Palette         as Palette      exposing ( Palette
 -- ^ an example palette
 
 
-{-| Option record for each item in the list which we need to decide to choose
-this record depends on the type of value and element (Element)
+{-| Option record for each item in the list from which user will choose.
+
+This record depends on the type of value and element (Element)
 -}
 type alias Option vt msg
     = { idString        : String
@@ -185,11 +187,11 @@ type alias Geom
 this module works well with your own record type generally, as 
 I used more generic type constraint in function definition
 
-    ...
-    , pseudoAnimState         : Animation.Messenger.State msg
-    ....
+    ..
+    , pseudoAnimState : Animation.Messenger.State msg
+    ..
 
-*Note:* elm-style-animation module doesn't supply low-level functions
+**Note:** elm-style-animation module doesn't supply low-level functions
 to get intermediate states of animation so I need more research
 but now I'm using renderPairs function to get the states of current
 values in 'String' format which will be traslated into number.
@@ -219,16 +221,19 @@ type alias MinimalState vt msg
 
 {-| Msg chain generally covers the following steps
 
-    1. Detect any scroll which has delayed 'Cmd' to check whether
-       scrolling is stopped or not.
-    2. If scroll stopped, trigger snapping to nearst item.
-    3. Find and decide which item will be target to snap.
-    4. Do animation related to snapping
-    5. Inform the snapping is done so outside world is able to know the 
-       which item(Option) is selected.
+```
+1. Detect any scroll which has delayed 'Cmd' to check
+   whether scrolling is stopped or not.
+2. If scroll stopped, trigger snapping to nearst item.
+3. Find and decide which item will be target to snap.
+4. Do animation related to snapping
+5. Inform the snapping is done so outside world is able
+   to know the which item(Option) is selected.
+```
 
 Unfortunately we need own Msg here which means you might need to
-map over those message into your own Msg type
+map over those message into your own Msg type.
+
 There are examples in this module regarding message mapping
 you could possibly search keyword 'messageMap' where I need to map the
 `Msg' into `msg'
@@ -238,25 +243,30 @@ type Msg vt msg
     = SyncLastScroll            Time.Posix Bool
     | OnScroll
     | TriggerSnapping           Time.Posix
-    | CheckInitialTargetOption  (List (Option vt msg))
-                                -- ^ options before the sample
-                                (Option vt msg)
-                                -- ^ initial sample to check
-                                (List (Option vt msg))
-                                -- ^ options after the sample
+    | CheckInitialTargetOption
+          (List (Option vt msg))
+          -- ^ options before the sample
+          (Option vt msg)
+          -- ^ initial sample to check
+          (List (Option vt msg))
+          -- ^ options after the sample
 
-    | DetermineTargetOption     (Result Error (List (Option vt msg)
-                                               --^  other candidates
-                                              , Maybe ( String
-                                                --^ current name of closest
-                                                --  Option
-                                                      , Float )
-                                                --^ current closest position
-                                                --  of an Option
-                                              )
-                                )
+    | DetermineTargetOption
+          (Result Error (List (Option vt msg)
+                              --^  other candidates
+                        , Maybe ( String
+                                  --^ current name of closest
+                                  --  Option
+                                 , Float )
+                                 --^ current closest position
+                                 --   of an Option
+                        )
+          )
+          
 
-    | SetSnapToTargetOption     String Float Float  --> id and relative position
+    | SetSnapToTargetOption     String Float Float
+                                -- ^ id, frame position,
+                                --   relative pos to snap
     | MoveToTargetOption        String
     | ScrollPickerSuccess       (Option vt msg)
     | ScrollPickerFailure       Error
@@ -268,6 +278,7 @@ type Msg vt msg
 type Msg vt msg
     = SyncLastScroll            Time.Posix Bool
     | OnScroll
+    | OnKey                     String
     | TriggerSnapping           Time.Posix
     | CheckInitialTargetOption  (List (Option vt msg))
                                 -- ^ options before the sample
@@ -299,8 +310,8 @@ type Msg vt msg
 {-| Error used for Task _x_ a
 
 **XXX:** this module doesn't really analyse the error status very well,
-but those data types are only used to explain the code what happened now
-and explain the reason to stop the task.
+but those data types are explaining the stauts in the code instead of
+any other types of comments.
 -}
 type Error
     = NoOptionAvailable
@@ -333,27 +344,16 @@ type alias BaseTheme palette msg
 scrollPicker function.
 
 ```elm
-exampleView : ExampleModel -> Html ExampleMsg
+...
 exampleView model
     = let
         theme
             = defaultTheme
 
         picker
-            = scrollPicker model theme
+            = viewAsElement model theme
 
-   in
-       layout [ Background.color <|
-                theme.palette.toElmUiColor theme.palette.surface
-              ] <|
-           row [ spacing 1
-               , centerX
-               , centerY
-               ]
-           [ picker model.firstPickerModel
-           , picker model.secondPickerModel
-           ]
-
+...
 -}
 defaultTheme : BaseTheme Palette msg
 defaultTheme
@@ -387,7 +387,7 @@ defaultShadeLengthWith pickerDirection
           Vertical ->
               Util.sizeScaled 8
 
-{-| and helper function for shade attributes for elm-ui
+{-| and helper function for shade elm-ui attributes (List Element.Attribute)
 -}
 defaultShadeAttrsWith : (BaseTheme
                              { palette |
@@ -475,8 +475,8 @@ defaultShadeAttrsWith theme pickerDirection startEnd
 
 
 
-{-| More settings for 'view' and 'defaultShadeAttrsWith' mainly
-because that picker has [`Direction`](#Direction)
+{-| Settings generated from the picker [`Direction`](#Direction) for function
+such as 'viewAsElement' and 'defaultShadeAttrsWith'.
 -}
 type alias BaseSettings compatible msg
     = { lengthSetter            : Length -> Attribute msg
@@ -595,8 +595,10 @@ initPseudoAnimState
 
 -- -- -- Helper functions for user -- -- --
 
-{-| get a list of Option record data from the whole model by searching
-option ID in a ditionary in the same order of optionID list
+{-| get a list of Option record data from the whole options by searching
+option ID in a Dict.
+
+The order of options in the same one of optionID list.
 -}
 getOptions : { state |
                optionIds : List String
@@ -611,7 +613,7 @@ getOptions { optionIds, optionIdToRecordDict }
     |> List.filterMap identity
 
 
-{-| save options from the list of pair of ( data, Element )
+{-| Save options from the list of pair of ( data, Element )
 option Ids are stored separately and details stored in a Dict
 there is no way to know how to make data value to string
 you should suggest the function (vt -> String)
@@ -696,7 +698,8 @@ unsafeSetScrollCheckTime milliSeconds state
       }
 
 
-{-| make option id string value for 'Option.idString'
+{-| make option id string value for 'Option.idString' which will be
+useful if you want to access the id on the page.
 -}
 getOptionIdString : (vt -> String) ->
                     String ->
@@ -711,6 +714,8 @@ getOptionIdString toStringFn pickerIdString optionValue
 
     
 {-| Check the Msg, and return if there is any new selected option
+
+please check this [Example][exampleUpdate].
 -}
 anyNewOptionSelected : Msg vt msg -> Maybe (Option vt msg)
 anyNewOptionSelected msg
@@ -771,13 +776,16 @@ stopSnapping state
 
 -- -- -- Helper functions for Internal usage -- -- --
 
-{-| Browser.Dom.Viewport, Browser.Dom.Element share basic record accessor
-like .x  .y  .width  .height getCenterPosOf function try to get center
-poistion of the some field
+{-| [`Browser.Dom.Viewport`](/packages/elm/browser/latest/Browser-Dom#Viewport), [`Browser.Dom.Element`](/packages/elm/browser/latest/Browser-Dom#Element) share basic record accessor
+like `.x`  `.y`  `.width`  `.height`
 
-    ex) to get center 'y' position of viewport, you can try
+getCenterPosOf function try to get center poisition of the some field.
 
-        getCenterPosOf .y .height .viewport aRecord
+ex) to get center 'y' position of viewport, you can try
+
+```elm
+getCenterPosOf .y .height .viewport aRecord
+```
 -}
 getCenterPosOf : (Geom -> Float) -> (Geom -> Float) -> (rec -> Geom) -> rec -> Float
 getCenterPosOf posAccessor lengthAccessor boxAccessor record
@@ -1052,15 +1060,13 @@ initMinimalState idString
 {-| Generating Element with theme setting and state value
 each function only try to some state value in the whole record
 so if you can apply this funciton with additional state you might want to use.
+
 BaseTheme DOES NOT use all the color in the Palette. the Colors used
 in the theme are 'accent', 'surface', 'background' 'on.background', 'on.surface'.
-
-```elm
-...
-```
+as you can see in the long signature
 
 This means the color listed above are should be in your own palette at least,
-even though if you are using your own color accessor(function).
+even if you are using your own color accessor(function) with your theme.
 -}
 viewAsElement : { appModel |
                   messageMapWith : (String -> (Msg vt msg) -> msg)
@@ -1218,12 +1224,12 @@ viewAsElement { messageMapWith, pickerDirection } theme state
 
 -- -- -- UPDATE -- -- --
 
-{-| updateWith function needs your own app model to ask `messageMapWith` and
- `pickerDirection` from the model. So if you want to use multiple picker,
-you can keep the same information in the same place.
+{-| updateWith function needs your own app model to ask to get `messageMapWith`
+ and `pickerDirection` from it. So if you want to use multiple picker,
+you can keep the same information in the same place in benefit.
 
 As other update function supposed to do, updateWith also does the job
-described in the [`Msg`](#Msg)
+described in the [`Msg`](#Msg) of the module.
 
 -}
 updateWith : { a |
@@ -1362,6 +1368,11 @@ updateWith { messageMapWith, pickerDirection } msg state
                      (messageMap << (Util.flip SyncLastScroll) False)
                      (Debug.log "user scroll:" Time.now)
                )
+
+           OnKey keyCodeString ->
+               let _ = Debug.log "key code:"
+               in
+                   ( state, Cmd.none )
 
            SyncLastScroll clock keepAnimation ->
                ( if keepAnimation then
@@ -1730,9 +1741,11 @@ subscriptionsWithHelper animMessageMapWith pickerRecords
     |> Sub.batch
     
 
-{-| Passing our 'Animation.Messenger.State msg' through subscriptions
-from elm-style-animation. because it involves with animation otherwise
-animation will not work at all!
+{-| Pass the list of the scroll states with your own application model
+to inform the function `messageMapWith` function, and you will get
+subscription (Sub msg).
+
+**Important:** no animation will work withought subscriptions!!!
 -}
 subscriptionsWith : List { state |
                            idString                 : String
@@ -1759,7 +1772,7 @@ subscriptionsWith pickerStates model
 
 -- -- -- SIMPLE EXAMPLE -- -- --
 
-{-| This module has -- unfortunately -- internal state so all the message
+{-| This module has internal state so all the message
 required to wrap (or map) to the your own Msg type.
 
 **Note:** Int type in (Msg *Int* ExampleMsg) is the type for options.
@@ -1910,7 +1923,6 @@ exampleUpdate msg model
 
 {-| exampleView shows how to reveal the model on the page by using elm-ui
 check out which settings you can change [`defaultTheme`](#defaultTheme)
-
 -}
 exampleView : ExampleModel -> Html ExampleMsg
 exampleView model
@@ -1952,15 +1964,18 @@ exampleView model
            ]
  
 
+
 {-| Scroll picker relies on animation by using elm-style-animation
 so subscriptions is essential to work with this module this is acheived easily.
 -}
 exampleSubscriptions : ExampleModel -> Sub ExampleMsg
 exampleSubscriptions model
-    = model |>
-      subscriptionsWith
-      [ model.firstPickerModel
-      , model.secondPickerModel
+    = Sub.batch
+      [ model
+          |> subscriptionsWith
+             [ model.firstPickerModel
+             , model.secondPickerModel
+             ]
       ]
 
 

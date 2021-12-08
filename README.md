@@ -1,7 +1,12 @@
 [setOptions]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#setOptions
 [initMinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#initMinimalModel
+[setScrollStopCheckTime]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#setScrollStopCheckTime
+[subscriptionsWith]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#subscriptionsWith
 [defaultTheme]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#defaultTheme
 [MinimalModel]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#MinimalModel
+[Option]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#Option
+[Msg]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#Msg
+[anyNewOptionSelected]: /packages/jeongoon/elmnt-scrollpicker/latest/Elmnt-BaseSCrollPicker#anyNewOptionSelected
 [exampleUrl]: https://jeongoon.github.io/examples/7Dec2021.BaseScrollPicker.html
 
 # An Elm-Ui friendly Scroll Picker
@@ -12,118 +17,104 @@ so you can use the View(widget) as an element in elm-ui.
 
 [See it in action here.][exampleUrl]
 
-# How to use
+# Usage
+
+This is low level module, So let me examplain fully. however If you are familiar
+with other *Elm architecture* style module, it is easier. Or you have
+chance to get used to it.
 
 ## Import
 
 ```elm
 import Element exposing (..)
 import Dict exposing (Dict)
+                     -- ^ options are stored in Dict
 import Elmnt.BaseScrollPicker as ScrollPicker
+                                 -- ^ or as you'd like
 ```
 
 ## **Make your own Model and Msg**
 
 ```elm
-
-    type ExampleMsg
-        = ScrollPickerMessage String
-          (ScrollPicker.Msg Int ExampleMsg)
-
+type AppMsg
+     = ScrollPickerMessage String
+       (ScrollPicker.Msg Int AppMsg)
 ```
 
-Unfortuneately, some states of picker are required to store in
-internal record. you might need to declare your own message wrapper
+ScrollPicker.Msg type involves the type of Your own message (AppMsg)
+and also the type of options that we'd like to pick from.
+`Int` is used for [`Option`][Option].
+
+Some states of picker are required to store in internal record.
+you might need to declare your own message wrapper
 constructor *ScrollPickerMessage* is an wrapper constructor (or map function) to
 create messages which is compatible to your own module message.
 
 
 Let's say we are making a simple time picker, we need two seprate
-pickers for hour and minute value.
+pickers for hour and minute value. If you want a Dict or List
+go for it!
 
 
 ```elm
-type alias ExampleModel -- which is your own model
-    = { firstPickerModel
-         : ScrollPicker.MinimalModel Int ExampleMsg
-      , secondPickerModel
-         : ScrollPicker.MinimalModel Int ExampleMsg
+type alias Model -- which is your own model
+    = { firstPickerState
+         : ScrollPicker.MinimalModel Int AppMsg
+      , secondPickerState
+         : ScrollPicker.MinimalModel Int AppMsg
       , messageMapWith
-         : String -> (ScrollPicker.Msg Int ExampleMsg) ->
-           ExampleMsg
+         : String -> (ScrollPicker.Msg Int AppMsg) ->
+           AppMsg
       , pickerDirection
          : ScrollPicker.Direction -- Horizontal or Vertical
       }
 ```
 
 
-## **View**
-exampleView shows how to reveal the model on the page by using elm-ui.
-
-check out which settings you can change [`defaultTheme`][defaultTheme]
-
-```elm
-exampleView : ExampleModel -> Html ExampleMsg
-exampleView model
-    = let
-        theme
-            = ScrollPicker.defaultTheme
-
-        picker
-            = scrollPicker.viewAsElement model theme
-
-   in
-       layout [ Background.color <|
-                theme.palette.toElmUiColor
-                    theme.palette.surface
-              ] <|
-           row [ spacing 1
-               , centerX
-               , centerY
-               ]
-           [ picker model.firstPickerModel
-           , picker model.secondPickerModel
-           ]
-```
-
-## **Model**
+## Model
 
 [`MinimalModel`][MinimalModel]
 you can still use any other API in the module to work with your own *picker*
 model As most of API use partial record type. for example [`setOptions`][setOptions]
-function has the definition like below
+function has the definition like below.
 
 ```elm
-setOptions : (vt -> String) ->
-             List (vt, Element msg) ->
-             { state |
-               idString  : String
-             , optionIds : List String
-             , optionIdToRecordDict : Dict String
-                                      (Option vt msg)
-             } -> -- At least, those fields are required
-                  -- in the state record
-             { state |
-               idString  : String
-             , optionIds : List String
-             , optionIdToRecordDict : Dict String
-                                      (Option vt msg)
-             } --> will return the same structure of
-               --  the state record
-```
+setOptions
+    : (vt -> String) ->
+      List (vt, Element msg) ->
+      { state |
+        idString  : String
+      , optionIds : List String
+      , optionIdToRecordDict : Dict String
+                               (Option vt msg)
+      } -> -- At least, those fields are required
+           -- in the state record
+      { state |
+        idString  : String
+      , optionIds : List String
+      , optionIdToRecordDict : Dict String
+                               (Option vt msg)
+      } --> will return the same structure of
+        --  the state record
+  ```
+
+The benifit of long signature is that hen you try to extend model and
+add more features(functions), those functions are stil working
+with your own model.
 
 
-## **Init**
+## Init
 Let's initialise our example model. Each picker model(or state) could be
-initialised with [`initMinimalModel`][initMinimalModel] and [`setOptions`][setOptions]
+initialised with functions such as [`initMinimalModel`][initMinimalModel],
+[`setOptions`][setOptions] and [`setScrollStopCheckTime`][setScrollStopCheckTime]
 
 
 ```elm
-exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
+exampleInit : () -> ( Model, Cmd AppMsg )
 exampleInit flags
-    = ( { firstPickerModel -- for hour value
+    = ( { firstPickerState -- for hour value
               = ScrollPicker.initMinimalModel
-                "firstScrollPicker"
+                "firstScrollPicker" -- id
               |> ScrollPicker.setOptions
                  (String.fromInt)
                  (List.range 1 12
@@ -138,7 +129,7 @@ exampleInit flags
               |> ScrollPicker.setScrollStopCheckTime 75
                  -- ^ a bit more quicker to check
 
-        , secondPickerModel -- for minute value
+        , secondPickerState -- for minute value
               = ScrollPicker.initMinimalModel
                 "secondScrollPicker"
               |> ScrollPicker.setOptions
@@ -159,7 +150,7 @@ exampleInit flags
         , messageMapWith
             = ScrollPickerMessage
           -- ^ a map function to wrap the picker messages
-          --   into the ExampleMsg
+          --   into the Msg
 
         , pickerDirection
             = ScrollPicker.Vertical
@@ -172,79 +163,77 @@ In your own update function, you might need to check picker Id and update
 the matched picker state(or model) accordingly.
 
 ```elm
-exampleUpdate : ExampleMsg -> ExampleModel ->
-                ( ExampleModel, Cmd ExampleMsg )
+exampleUpdate : AppMsg -> Model ->
+                ( Model, Cmd AppMsg )
 exampleUpdate msg model
     = let update
               = ScrollPicker.updateWith model
       in
-          case msg of
-              ScrollPickerMessage idString pickerMsg ->
-                  case idString of
-                      "firstScrollPicker" ->
-                          let ( firstPickerModel, cmd )
-                                  = update pickerMsg
-                                      model.firstPickerModel
+      case msg of
+          ScrollPickerMessage idString pickerMsg ->
+              case idString of
+                  "firstScrollPicker" ->
+                      let ( firstPickerState, cmd )
+                              = update pickerMsg
+                                  model.firstPickerState
 
-                              newModel
-                                  = { model |
-                                      firstPickerModel
-                                          = firstPickerModel
-                                    }
-                                  
-                          in ( case ScrollPicker.anyNewOptionSelected
-                                      pickerMsg of
+                          newModel
+                              = { model |
+                                  firstPickerState
+                                      = firstPickerState
+                                }
+                              
+                      in ( case ScrollPicker.anyNewOptionSelected
+                                  pickerMsg of
 
-                                   Just option ->
-                                       { newModel |
-                                         hourValue
-                                             = option.value
-                                       }
-                                   Nothing ->
-                                       newModel
-                               , cmd
-                             )
+                               Just option ->
+                                   { newModel |
+                                     hourValue
+                                         = option.value
+                                   }
+                               Nothing ->
+                                   newModel
+                           , cmd
+                         )
 
-                      "secondScrollPicker" ->
-                          let ( secondPickerModel, cmd )
-                                  = update pickerMsg
-                                      model.secondPickerModel
+                  "secondScrollPicker" ->
+                      let ( secondPickerState, cmd )
+                              = update pickerMsg
+                                  model.secondPickerState
 
-                              newModel
-                                  = { model |
-                                      secondPickerModel
-                                          = secondPickerModel
-                                    }
-                                  
-                          in ( case ScrollPicker.anyNewOptionSelected
-                                      pickerMsg of
+                          newModel
+                              = { model |
+                                  secondPickerState
+                                      = secondPickerState
+                                }
+                              
+                      in ( case ScrollPicker.anyNewOptionSelected
+                                  pickerMsg of
 
-                                   Just option ->
-                                       { newModel |
-                                         minuteValue
-                                            = option.value
-                                       }
-                                   Nothing ->
-                                       newModel
-                               , cmd
-                             )
+                               Just option ->
+                                   { newModel |
+                                     minuteValue
+                                        = option.value
+                                   }
+                               Nothing ->
+                                   newModel
+                           , cmd
+                         )
 
-                      _ ->
-                          ( model, Cmd.none )
+                  _ ->
+                      ( model, Cmd.none )
 ```
 
-And picker model itself *does not* hold selected 'option', you also need to
-check some message `Elmnt.BasePickerModel.ScrollPickerSuccess`
+And picker model itself *does not* hold selected option, you also need to
+check some message [`Elmnt.BasePickerState.ScrollPickerSuccess`][Msg]
+or you can use [`anyNewOptionSelected`][anyNewOptionSelected] function like above code.
 
-**Note:** `anyNewOptionSelected` function can be useful to set new value
-from the picker. you can also check this out from below code.
-
-## **View**
+## View
 
 Here is an example
 
 ```elm
-exampleView : ExampleModel -> Html ExampleMsg
+exampleView : Model -> Html AppMsg
 exampleView model
     = let
         theme
@@ -254,7 +243,7 @@ exampleView model
             = theme.palette
 
         pickerHelper
-            = viewScrollPicker model theme
+            = ScrollPicker.viewAsElement model theme
 
    in
        layout [ Background.color
@@ -267,8 +256,8 @@ exampleView model
                   ]
                [ row [ spacing 1
                      ]
-                     [ pickerHelper model.firstPickerModel
-                     , pickerHelper model.secondPickerModel
+                     [ pickerHelper model.firstPickerState
+                     , pickerHelper model.secondPickerState
                      ]
 
                , el [ MAttr.paddingTop 20
@@ -284,33 +273,37 @@ exampleView model
                     , centerX
                     ] <|
                    text <| "It's " ++
-                       (model.hourValue |> String.fromInt) ++
-                       ":" ++
-                       (model.minuteValue |> String.fromInt )
+                       ( model.hourValue
+                            |> String.fromInt
+                       ) ++ ":" ++
+                       ( model.minuteValue
+                            |> String.fromInt
+                            |> String.padLeft 2 '0'
+                       )
            ]
 ```
 
 ## Subscriptions
 
-Scroll picker relies on animation by using elm-style-animation and subscriptions is
-essential to see actual animation on going now.
+Animation relies on subscriptions. elm-style-animation also does so.
+[`subscriptionsWith`][subscriptionsWith] helps how to subscribe.
 
 ```elm
-exampleSubscriptions : ExampleModel -> Sub ExampleMsg
+exampleSubscriptions : Model -> Sub AppMsg
 exampleSubscriptions model
     = model |>
-      subscriptionsWith
-      [ model.firstPickerModel
-      , model.secondPickerModel
+      ScrollPicker.subscriptionsWith
+      [ model.firstPickerState
+      , model.secondPickerState
       ]
 ```
 
 ## Main
 
-Finally you can make main funciton with all the function above.
+Finally you can wire thems up in the elm architecture.
 
 ```elm
-main : Program () ExampleModel ExampleMsg
+main : Program () Model AppMsg
 main
     = Browser.element
       { init = exampleInit
@@ -322,12 +315,16 @@ main
 
 # Testing Environment
 
-I'm a chef and but still using Linux since 2001. I don't have enough chance
-to check on Apple product.
-
 - Firefox (currently 94.0.1) on Arch linux
 - Vivaldi
 - [`Gnome Web Epiphany`](https://apps.gnome.org/en-GB/app/org.gnome.Epiphany/)
+
+I'm a chef and not professional programmer but am still using Linux since 2001.
+my 8 years old laptop can only run Linux smoothly. And I don't have enough
+chance to check things on Apple product, either.
+
+so, if you need more techincal support on other platform, please contribute
+your solution.
 
 
 # More Information
