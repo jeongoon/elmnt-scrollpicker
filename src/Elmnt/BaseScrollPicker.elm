@@ -12,8 +12,6 @@ module Elmnt.BaseScrollPicker
                  , BaseSettings
                  --, scrollPosPropertyName
                  --, scrollPosProperty
-                 --, initPseudoAnimStateHelper
-                 --, initPseudoAnimState
                  , getOptions
                  , setOptions
                  , setScrollStopCheckTime
@@ -28,6 +26,8 @@ module Elmnt.BaseScrollPicker
                  -- v  low-level api
                  , isSnapping
                  , stopSnapping
+                 , initPseudoAnimStateHelper
+                 , initPseudoAnimState
                  , defaultShadeLengthWith
                  , defaultShadeAttrsWith
                  , defaultBaseSettingsWith
@@ -61,7 +61,7 @@ want add some feature with your own picker model.
 
 @docs MinimalState, Direction, StartEnd, Option, Msg, Error
 
-# **State(picker model) Creation, Modification and Query**
+# State(picker model) Creation, Modification and Query
 
 @docs initMinimalState, setOptions, getOptions, setScrollStopCheckTime, anyNewOptionSelected
 
@@ -83,7 +83,8 @@ want add some feature with your own picker model.
 
 # Low-level Data types and functions
 
-@docs isSnapping, stopSnapping, unsafeSetScrollCheckTime, defaultShadeLengthWith,
+@docs isSnapping, stopSnapping, unsafeSetScrollCheckTime, initPseudoAnimState,
+initPseudoAnimStateHelper, defaultShadeLengthWith,
 defaultShadeAttrsWith, defaultBaseSettingsWith, Geom, getCenterPosOf,
 partitionOptionsHelper, getRelPosOfElement, taskTargetOptionRelPosHelper,
 taskGetViewport, taskGetViewportPosHelper, toMilliPixel, fromMilliPixel,
@@ -237,43 +238,6 @@ map over those message into your own Msg type.
 There are examples in this module regarding message mapping
 you could possibly search keyword 'messageMap' where I need to map the
 `Msg' into `msg'
-
-```elm
-type Msg vt msg
-    = SyncLastScroll            Time.Posix Bool
-    | OnScroll
-    | TriggerSnapping           Time.Posix
-    | CheckInitialTargetOption
-          (List (Option vt msg))
-          -- ^ options before the sample
-          (Option vt msg)
-          -- ^ initial sample to check
-          (List (Option vt msg))
-          -- ^ options after the sample
-
-    | DetermineTargetOption
-          (Result Error (List (Option vt msg)
-                              --^  other candidates
-                        , Maybe ( String
-                                  --^ current name of closest
-                                  --  Option
-                                 , Float )
-                                 --^ current closest position
-                                 --   of an Option
-                        )
-          )
-          
-
-    | SetSnapToTargetOption     String Float Float
-                                -- ^ id, frame position,
-                                --   relative pos to snap
-    | MoveToTargetOption        String
-    | ScrollPickerSuccess       (Option vt msg)
-    | ScrollPickerFailure       Error
-    | Animate                   Animation.Msg
-    | AnimateSnapping           Int
-    | NoOp
-```
 -}
 type Msg vt msg
     = SyncLastScroll            Time.Posix Bool
@@ -1656,15 +1620,14 @@ updateWith { messageMapWith, pickerDirection } msg state
                                      = scrollTraceMP
                                      -- this value is not quite synchronized with
                                      -- 'OnScroll' Msg which catches the event later
-                                     -- than one or two Animation happed already.
+                                     -- than one or two Animation happened already.
                                      -- So we will follow the trace of Animation
                                      -- position to check any 'scroll' events made
                                      -- from the this module in the end.
                                         
                                  }
                                , Cmd.batch
-                                     [ animCmd
-                                     , ( if (state.finalTargetScrollPosMP
+                                     [ ( if (state.finalTargetScrollPosMP
                                                 |> isInScrollTraceHelper
                                                 |> List.filter ((==) 0)
                                                 |> List.length            ) > 1 then
@@ -1697,6 +1660,8 @@ updateWith { messageMapWith, pickerDirection } msg state
                                                        messageMap internalMsg
                                                    _ ->
                                                        messageMap NoOp)
+
+                                     , animCmd
                                      ]
                                )
                        _ ->

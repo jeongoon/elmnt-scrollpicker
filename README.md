@@ -11,6 +11,10 @@
 
 # An Elm-Ui friendly Scroll Picker
 
+```shell
+elm install jeongoon/elmnt-scrollpicker
+```
+
 `elmnt-scrollpicker` provides an scroll picker with some animation. `elmnt`
 is stands for [`Element`](https://package.elm-lang.org/packages/mdgriffith/elm-ui/latest/)
 so you can use the View(widget) as an element in elm-ui.
@@ -261,14 +265,13 @@ exampleView model
                      ]
 
                , el [ paddingEach
-                        { top : 20
-                        , right: 0
-                        , bottom: 0
-                        , left : 0
+                        { top    = 20
+                        , right  = 0
+                        , bottom = 0
+                        , left   = 0
                         }
                     , Font.size
-                        ( ScrollPicker.defaultFontSize
-                              |> toFloat
+                        ( (modular 16 1.25 8)
                               |> (*) 0.7
                               |> truncate
                         )
