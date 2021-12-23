@@ -26,6 +26,17 @@ defaultFontSize
 
 -- -- -- SIMPLE EXAMPLE -- -- --
 
+{-| Basic Minimal Option with Integer type
+-}
+type alias ExampleOption
+    = ScrollPicker.MinimalOption Int ExampleMsg
+
+{-| ScrollPicker Msg type example
+-}
+type alias ExampleScrollPickerMsg
+    = ScrollPicker.Msg {} Int ExampleMsg
+                     -- ^ no extra option field
+
 {-| This module has internal state so all the message
 required to wrap (or map) to the your own Msg type.
 
@@ -33,7 +44,7 @@ required to wrap (or map) to the your own Msg type.
 Please Checkout [`Option`](#option) for further information.
 -}
 type ExampleMsg
-    = ScrollPickerMessage String (ScrollPicker.Msg Int ExampleMsg)
+    = ScrollPickerMessage String ExampleScrollPickerMsg
 
 
 {-| There are two separate picker in this example, first picker will choose
@@ -45,9 +56,17 @@ messageMapWith, pickerDirection is used in the [`scrollPicker`](#scrollPicker)
 so it might be handy if you keep the same name.
 -}
 type alias ExampleModel
-    = { firstPickerState  : ScrollPicker.MinimalState Int ExampleMsg
-      , secondPickerState : ScrollPicker.MinimalState Int ExampleMsg
-      , messageMapWith    : String -> (ScrollPicker.Msg Int ExampleMsg) -> ExampleMsg
+    = { firstPickerState  : ScrollPicker.MinimalState
+                            {}
+                            Int
+                            ExampleMsg
+
+      , secondPickerState : ScrollPicker.MinimalState
+                            {}
+                            Int
+                            ExampleMsg
+
+      , messageMapWith    : String -> ExampleScrollPickerMsg -> ExampleMsg
       , pickerDirection   : ScrollPicker.Direction
       , hourValue         : Int
       , minuteValue       : Int
@@ -55,7 +74,7 @@ type alias ExampleModel
 
 
 {-| Initialise our example model. Each picker model can be initialised with
-[`initMinimalState`](#initMinimalState) and [`setOptions`](#setOptions)
+[`initMinimalStateWith`](#initMinimalStatewith) and [`setOptions`](#setOptions)
 
 And you might need to set default value for the picker.
 how the example does
@@ -63,39 +82,63 @@ how the example does
 exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
 exampleInit flags
     = ( { firstPickerState -- for hour value
-              = ScrollPicker.initMinimalState "firstScrollPicker"
-                |> ScrollPicker.setOptions
-                   (String.fromInt)
-                   (List.range 1 12
-                      |> List.map
-                         ( \n -> ( n
-                                 , n |> ( String.fromInt >> text )
-                                 )
-                         )
-                   )
-                |> ScrollPicker.setScrollStopCheckTime 75
+              = ( ScrollPicker.initMinimalState  "firstScrollPicker"
+                    |> ScrollPicker.setOptions
+                       ( List.range 1 12
+                          |> List.map
+                             ( \n ->
+                                   ( n
+                                     |> String.fromInt
+                                   , ScrollPicker.OptionWrap
+                                     { idString
+                                           = ""
+                                     , index
+                                           = -1
+                                     , value
+                                           = n
+                                     , element
+                                           = n
+                                           |> ( String.fromInt >> text )
+                                     }
+                                   )
+                             )
+                       )
+                )
+--              |> ScrollPicker.setScrollStopCheckTime 75
 
         , secondPickerState -- for minute value
-              = ScrollPicker.initMinimalState "secondScrollPicker"
-                |> ScrollPicker.setOptions
-                   (String.fromInt)
-                   (List.range 0 59
-                      |> List.map
-                         ( \n -> ( n
-                                 , n |> ( String.fromInt
-                                              >> String.padLeft 2 '0'
-                                              >> text
-                                        )
-                                 )
-                         )
-                   )
+              = --ScrollPicker.StateWrap
+                ( ScrollPicker.initMinimalState "secondScrollPicker"
+                   |> ScrollPicker.setOptions
+                      (List.range 0 59
+                        |> List.map
+                           ( \n -> ( n
+                                     |> String.fromInt -- sub id string
+                                   , ScrollPicker.OptionWrap
+                                     { idString      -- will be updated when setOption
+                                           = ""
+                                     , index
+                                           = -1      -- will be updated also
+                                     , value
+                                           = n
+                                     , element
+                                           = n
+                                           |>( String.fromInt
+                                                   >> String.padLeft 2 '0'
+                                                   >> text
+                                             )
+                                     }
+                                   )
+                           )
+                      )
+                )
+
 
         , messageMapWith = ScrollPickerMessage
-          -- ^ a map function to wrap the picker messages into the ExampleMsg
         , pickerDirection = ScrollPicker.Vertical
         , hourValue = 5
         , minuteValue = 32
-        }              
+        }
 
       -- v focus to initial values
       , [ ( "firstScrollPicker", 5 )
@@ -106,10 +149,11 @@ exampleInit flags
                      Task.succeed <| ScrollPickerMessage pickerIdString <|
                          ScrollPicker.MoveToTargetOption <|
                              ScrollPicker.getOptionIdString
-                             String.fromInt
-                             pickerIdString optionValue
+                                 String.fromInt
+                                 pickerIdString
+                                 optionValue
            )
-      |> Cmd.batch
+        |> Cmd.batch
       )
 
 {-| and inside your update function you can check picker Id and update approriate
@@ -156,7 +200,7 @@ exampleUpdate msg model
                                       secondPickerState
                                           = secondPickerState
                                     }
-                                  
+
                           in ( case ScrollPicker.anyNewOptionSelected
                                     pickerMsg of
                                    Just option ->
@@ -222,8 +266,6 @@ exampleView model
                              |> String.padLeft 2 '0'
                        )
            ]
- 
-
 
 {-| Scroll picker relies on animation by using elm-style-animation
 so subscriptions is essential to work with this module this is acheived easily.

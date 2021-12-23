@@ -5,6 +5,8 @@ module Elmnt.Theme
              , Palette
              , defaultPalette
              , lightPalette
+             , PaletteType
+             , PaletteOnType
              )
 
 {-| This module provides default / custom value data type and shows an example of
@@ -20,6 +22,7 @@ module Elmnt.Theme
 
 -}
 
+import Element
 import Color                                    exposing ( Color )
 import Internal.Palette         as Palette
 import Internal.ColorUtil       as ColorUtil
@@ -29,6 +32,33 @@ import Internal.ColorUtil       as ColorUtil
 -}
 type alias Palette
     = Palette.Palette
+
+type alias PaletteType
+    = { primary : Color
+      , secondary : Color
+      , success : Color
+      , info : Color
+      , warning : Color
+      , danger : Color
+      , accent : Color
+      , surface : Color
+      , background : Color
+      , on : PaletteOnType
+      , toElmUiColor
+          : (Color -> Element.Color)
+      }
+
+type alias PaletteOnType
+    = { primary : Color
+      , secondary : Color
+      , success : Color
+      , info : Color
+      , warning : Color
+      , danger : Color
+      , accent : Color
+      , surface : Color
+      , background : Color
+      }
 
 {-| Each theme value can be default or custom value.
 

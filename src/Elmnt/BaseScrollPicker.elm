@@ -1,17 +1,27 @@
-module Elmnt.BaseScrollPicker 
-        exposing ( Option
+{-
+FIXME:
+base scroll picker always trigger later?
+and implement those things in ScrollPicker?
+-}
+
+module Elmnt.BaseScrollPicker
+        exposing ( MinimalOption
+                 , MinimalOptionLike
+                 , OptionWrap
+                 , OptionLike
                  , Direction (..)
                  , StartEnd (..)
                  , MinimalState
+                 , MinimalStateLike
                  , Msg (..)
                  , Error
+                 , MinimalPaletteLike
+                 , MinimalPaletteOnLike
                  , BaseTheme
                  , defaultTheme
                  --, defaultFontSize
                  --, defaultBorderWidth
                  , BaseSettings
-                 --, scrollPosPropertyName
-                 --, scrollPosProperty
                  , getOptions
                  , setOptions
                  , setScrollStopCheckTime
@@ -26,11 +36,17 @@ module Elmnt.BaseScrollPicker
                  -- v  low-level api
                  , isSnapping
                  , stopSnapping
+                 , hasCenterOption
+                 , setCenterOption
+                 , resetCenterOption
                  , initPseudoAnimStateHelper
                  , initPseudoAnimState
                  , defaultShadeLengthWith
                  , defaultShadeAttrsWith
                  , defaultBaseSettingsWith
+                 , scrollPosPropertyName
+                 , scrollPosProperty
+                 , getOptionsWrapped
                  , Geom
                  , getCenterPosOf
                  , partitionOptionsHelper
@@ -43,7 +59,6 @@ module Elmnt.BaseScrollPicker
                  , subscriptionsWithHelper
                )
 
-                    
 
 {-| This module is an implementation of picker by scrolling and basic view type is [`elm-ui`][elm-ui].
 and animation can be done a bit tricky but easily thanks to [`elm-style-animation`][elm-style-animation].
@@ -63,7 +78,8 @@ want add some feature with your own picker model.
 
 # State(picker model) Creation, Modification and Query
 
-@docs initMinimalState, setOptions, getOptions, setScrollStopCheckTime, anyNewOptionSelected
+@docs initMinimalState, setOptions, getOptions, setScrollStopCheckTime,
+anyNewOptionSelected
 
 # Update
 
@@ -74,7 +90,7 @@ want add some feature with your own picker model.
 @docs subscriptionsWith
 
 # View
- 
+
 @docs viewAsElement, defaultTheme, BaseTheme, BaseSettings
 
 # Helper functions
@@ -96,13 +112,13 @@ subscriptionsWithHelper
 
 -}
 
-import Dict                                     exposing (Dict)
-import Set                                      exposing (Set)
+import Dict                                     exposing ( Dict )
+import Set                                      exposing ( Set )
 import Time
 import Process
 import Task                                     exposing ( Task )
 
-import Element                                  exposing (..)
+import Element                                  exposing ( .. )
 -- ^ this module is basically based on the elm-ui
 
 import Element.Font             as Font
@@ -112,20 +128,16 @@ import Element.Background       as Background
 import Element.Region           as Region
 
 import Color                                    exposing ( Color )
--- ^ this is better choice for color `period'
+-- ^ this is best choice for color data 'period'
 
 import Html                                     exposing ( Html )
-import Html.Attributes          as HtmlAttr
-import Html.Events              as HtmlEvents
 
-import Json.Encode              as Encode
 import Json.Decode              as Decode
 
 import Css
 import Html.Styled
 import Html.Styled.Attributes                   exposing ( css )
 import Html.Styled.Events
-
 
 import Browser
 import Browser.Dom
@@ -135,6 +147,7 @@ import Animation
 import Animation.Messenger
 
 -- -- -- Internal modules and helpers -- -- --
+
 import Elmnt.Theme              as Theme
 import Internal.Util            as Util
 import Internal.MoreAttributes  as MAttr
@@ -144,18 +157,60 @@ import Internal.Palette         as Palette      exposing ( Palette
                                                          )
 -- ^ an example palette
 
+{-| General prototype for option which has minimal set of fields
+ -}
+type alias MinimalOptionLike extraOpt vt msg
+    = { extraOpt |
+        idString        : String
+      , index           : Int
+      , value           : vt
+      , element         : Element msg
+      }
+
+
+{-| General prototype for option which can handle Attributes depends on position
+ -}
+type alias OptionLike extraOpt vt msg
+    = { extraOpt |
+        idString           : String
+      , index              : Int
+      , value              : vt
+      , element            : Element msg
+      , longitudinalLength : Float
+      }
+
 
 {-| Option record for each item in the list from which user will choose.
 
 This record depends on the type of value and element (Element)
 -}
-type alias Option vt msg
-    = { idString        : String
-      , index           : Int
-      , value           : vt
-      , element         : Element msg
-      }
-    
+type alias MinimalOption vt msg
+    = MinimalOptionLike {} vt msg
+                     -- ^ no extra option filed.
+
+
+{-| A wrapper for option types, which is useful when you try to
+put some option that has type of superset of `MinimalOptionLike`
+you can wrap it with `OptionWrap`
+
+```elm
+{ state |
+  optionIdToRecordDict
+      = Dict.fromList
+        [ OptionWrap (SomeYourOption id index value element) ]
+}
+...
+```
+
+and you can get real value by calling .unwrap with the value
+
+```elm
+wrappedOption.unwrap.idString -- to get id of option
+```
+-}
+type alias OptionWrap extraOpt vt msg
+    = { unwrap : MinimalOptionLike extraOpt vt msg }
+
 
 {-| Picker direction
 -}
@@ -182,10 +237,17 @@ type alias Geom
       }
 
 
+{-| two dimensional value
+-}
+type alias TwoDim
+    = { startPoint : Float
+      , endPoint   : Float
+      }
+
 -- -- -- MODEL -- -- --
 
-{-| Provide Minimal model (or state) to work with. most of funciton in 
-this module works well with your own record type generally, as 
+{-| Provide Minimal model (or state) to work with. most of funciton in
+this module works well with your own record type generally, as
 I used more generic type constraint in function definition
 
     ..
@@ -200,10 +262,16 @@ Even though one state value is used, I need to use Animation.style function
 to generate the state which can contain a lot more information
 
 -}
-type alias MinimalState vt msg
-    = { idString                : String
+type alias MinimalState extraOpt vt msg
+    = MinimalStateLike {} extraOpt vt msg
+                       -- ^ {} : no extra state field.
+
+{-| used for internal type checking -}
+type alias MinimalStateLike extraStat extraOpt vt msg
+    = { extraStat |
+        idString                : String
       , optionIds               : List String
-      , optionIdToRecordDict    : Dict String (Option vt msg)
+      , optionIdToRecordDict    : Dict String (OptionWrap extraOpt vt msg)
       , targetIdString          : Maybe String
       , pseudoAnimState         : Animation.Messenger.State msg
       -- ^ elm-style-animation doesn't support low-level functions
@@ -215,8 +283,11 @@ type alias MinimalState vt msg
       -- used for checking 'scroll' events coming from the module or user
       -- **Note:** Set is used because one direction Animation is in use.
 
-      , finalTargetScrollPosMP  : Int           -- MP : Milli Seconds
+      , finalTargetScrollPosMP  : Int           -- MP : Milli Pixels
       , scrollStopCheckTime     : Int
+      , optionIdInTheCenter     : Maybe String
+      , frameCenterPos          : Float
+      , optionCenterRelPos      : Float
       }
 
 
@@ -239,19 +310,35 @@ There are examples in this module regarding message mapping
 you could possibly search keyword 'messageMap' where I need to map the
 `Msg' into `msg'
 -}
-type Msg vt msg
+type Msg extraOpt vt msg
     = SyncLastScroll            Time.Posix Bool
     | OnScroll
     | OnKey                     String
+    | FindCenterOption          (String -> Float -> Float ->
+                                 Msg extraOpt vt msg)
     | TriggerSnapping           Time.Posix
-    | CheckInitialTargetOption  (List (Option vt msg))
+    | CheckInitialTargetOption  (String -> Float -> Float ->
+                                -- ^ onSuccess (will be passed to
+                                --              DetermineTargetOption)
+                                 Msg extraOpt vt msg)
+                                (List (OptionWrap extraOpt vt msg))
                                 -- ^ options before the sample
-                                (Option vt msg)
+                                (OptionWrap extraOpt vt msg)
                                 -- ^ initial sample to check
-                                (List (Option vt msg))
+                                (List (OptionWrap extraOpt vt msg))
                                 -- ^ options after the sample
 
-    | DetermineTargetOption     (Result Error (List (Option vt msg)
+    | DetermineTargetOption     (String -> Float -> Float ->
+                                -- ^ onSuccess
+                                 Msg extraOpt vt msg)
+
+                                -- if the option nearest to the center of frame
+                                -- what will we do next?
+                                --   SetSnapToTargetOption ?
+                                --   SyncCenterOption ?
+
+                                (Result Error (List (OptionWrap
+                                                         extraOpt vt msg)
                                                --^  other candidates
                                               , Maybe ( String
                                                 --^ current name of closest
@@ -262,10 +349,11 @@ type Msg vt msg
                                               )
                                 )
 
-    | SetSnapToTargetOption     String Float Float  --> id and relative position
+    | SyncCenterOption          String Float Float--> id, base pos, relative pos
+    | SetSnapToTargetOption     String Float Float--> ditto
     | MoveToTargetOption        String
-    | ScrollPickerSuccess       (Option vt msg)
-    | ScrollPickerFailure       Error
+    | ScrollPickerSuccess       (MinimalOptionLike extraOpt vt msg)
+    | ScrollPickerFailure       String String Error
     | Animate                   Animation.Msg
     | AnimateSnapping           Int
     | NoOp
@@ -281,9 +369,60 @@ type Error
     = NoOptionAvailable
     | InvalidOptionId (Maybe String)
     | DomError Browser.Dom.Error
-    | AnotherScrollBlockSnapping
     | ScrollNegligible
-    
+    | CenterOptionUnavailable
+    | NotDefinedError
+
+{-| a type for getting picker direction and end point (at the beginning or the
+end) and give a list of Element.Attribute used in [`BaseTheme`](#BaseTheme)
+and partially used in defaultShadeAttrsWith.
+-}
+type alias ShadeAttrsFunction msg
+    = Direction -> StartEnd -> List (Attribute msg)
+
+{-| gets information related to an option -- especially relative location from
+the beginning of option list -- and gives a list of Attribute for the option and
+give updated next option starting point.
+-}
+type alias OptionAttrsFunction extraOpt vt msg palette paletteOn
+    = { pickerDirection : Direction
+      , framePosition   : TwoDim
+      , optionPosition  : TwoDim
+      , option          : OptionLike extraOpt vt msg
+      , cursorPosition  : Float
+      , palette         : MinimalPaletteLike palette
+                          (MinimalPaletteOnLike paletteOn)
+      } ->
+    ( List (Attribute msg)
+    , Float -- new cursorPosition
+    )
+
+
+{-| Only some palette color are used in this module and this is minimum
+set of elements.
+
+Please have a look at [`MinimalPaletteOn`](#MinimalPaletteOn) as
+well
+-}
+type alias MinimalPaletteLike palette paletteOn
+    = { palette |
+        accent            : Color
+      , surface           : Color
+      , background        : Color
+      , on : MinimalPaletteOnLike paletteOn
+      , toElmUiColor      : Color -> Element.Color
+      }
+
+
+{-| Only some palette color are used in this module. and this on 'on'
+field of [`MinimalPalette`](#MinimalPalette)
+-}
+type alias MinimalPaletteOnLike paletteOn
+    = { paletteOn |
+        background : Color
+      , surface    : Color
+      }
+
 
 {-| An example settings value type in use here
 -}
@@ -299,8 +438,12 @@ type alias BaseTheme palette msg
       , shadeLength       : Theme.Value Int
       , pickerLength      : Theme.Value Int
       , pickerWidth       : Theme.Value Int
-      , shadeAttrsFn      : Theme.Value (Direction -> StartEnd -> List (Attribute msg))
-
+      , shadeAttrsFn      : Theme.Value (ShadeAttrsFunction msg)
+{-
+      , optionAttrFn      : Theme.Value (OptionAttrsFunction
+                                         extraOpt vt msg
+                                         pal palOn)
+-}
       }
 
 
@@ -329,13 +472,13 @@ defaultTheme
           Theme.defaultPalette df df df df df df df df df df df
 
 
-{-|
+{-| not exported
 -}
 defaultFontSize : Int
 defaultFontSize
     = Util.sizeScaled 8
 
-{-|
+{-| not exported
 -}
 defaultBorderWidth : Int
 defaultBorderWidth
@@ -353,22 +496,10 @@ defaultShadeLengthWith pickerDirection
 
 {-| and helper function for shade elm-ui attributes (List Element.Attribute)
 -}
-defaultShadeAttrsWith : (BaseTheme
-                             { palette |
-                               accent : Color
-                             , surface : Color
-                             , background : Color
-                             , on : { paletteOn |
-                                      background : Color
-                                    , surface    : Color
-                                    }
-                             , toElmUiColor : Color -> Element.Color
-                             }
-                             msg
+defaultShadeAttrsWith : (BaseTheme (MinimalPaletteLike palette
+                                        (MinimalPaletteOnLike paletteOn)) msg
                         ) ->
-                        Direction ->
-                        StartEnd ->
-                        List (Attribute msg)
+                        (ShadeAttrsFunction msg)
 
 defaultShadeAttrsWith theme pickerDirection startEnd
     = let
@@ -382,10 +513,9 @@ defaultShadeAttrsWith theme pickerDirection startEnd
                         ( "left", "right" )
                     ( Horizontal, End ) ->
                         ( "right", "left" )
-          
+
         { lengthSetter, widthSetter, shadeLength, borderWidth, pickerWidth }
-           = theme
-            |> defaultBaseSettingsWith pickerDirection
+           = defaultBaseSettingsWith theme pickerDirection
 
         pickerWidthSetter
             = (px pickerWidth) |> minimum 15 |> widthSetter
@@ -410,7 +540,6 @@ defaultShadeAttrsWith theme pickerDirection startEnd
                         |> rgbaStrHelper 0.05
                     ]
               ) ++ ")"
-                      
 
       in
           [ MAttr.positionAbsolute
@@ -438,7 +567,6 @@ defaultShadeAttrsWith theme pickerDirection startEnd
           ]
 
 
-
 {-| Settings generated from the picker [`Direction`](#Direction) for function
 such as 'viewAsElement' and 'defaultShadeAttrsWith'.
 -}
@@ -463,21 +591,21 @@ type alias BaseSettings compatible msg
       , pickerLength            : Int
       , pickerWidth             : Int
       }
-                                          
+
 
 {-| Generate setting values for a picker which has `Direction`
 -}
-defaultBaseSettingsWith : Direction ->
-                      { theme |
-                        fontSize     : Theme.Value Int
-                      , borderWidth  : Theme.Value Int
-                      , shadeLength  : Theme.Value Int
-                      , pickerLength : Theme.Value Int
-                      , pickerWidth  : Theme.Value Int
-                      } ->
-                      BaseSettings compatible msg
+defaultBaseSettingsWith : { theme |
+                            fontSize     : Theme.Value Int
+                          , borderWidth  : Theme.Value Int
+                          , shadeLength  : Theme.Value Int
+                          , pickerLength : Theme.Value Int
+                          , pickerWidth  : Theme.Value Int
+                          } ->
+                          Direction ->
+                          BaseSettings compatible msg
 
-defaultBaseSettingsWith pickerDirection theme
+defaultBaseSettingsWith theme pickerDirection
     = let
         borderWidth
             = theme.borderWidth
@@ -512,7 +640,7 @@ defaultBaseSettingsWith pickerDirection theme
                      }
                      centerY
                      Css.height Css.overflowX Css.overflowY
-  
+
              Vertical ->
                  BaseSettings
                      height width column "top"
@@ -522,10 +650,10 @@ defaultBaseSettingsWith pickerDirection theme
                      centerX
                      Css.width Css.overflowY Css.overflowX
        )
+       -- and rest settings ...
        fontSize shadeLength borderWidth pickerLength pickerWidth
-                          
 
-{-| property name used for Animation which will be sent to 
+{-| property name used for Animation which will be sent to
 "Browser.Dom.setViewportOf' eventually
 -}
 scrollPosPropertyName : String
@@ -557,24 +685,33 @@ initPseudoAnimState
     = initPseudoAnimStateHelper scrollPosProperty
 
 
+{-| -}
+type alias StateUpdater extraStat extraOpt vt msg
+    = MinimalStateLike extraStat extraOpt vt msg ->
+      MinimalStateLike extraStat extraOpt vt msg
+
 -- -- -- Helper functions for user -- -- --
+
+getOptionsWrapped : MinimalStateLike extraStat extraOpt vt msg ->
+                    List (OptionWrap extraOpt vt msg)
+getOptionsWrapped { optionIds, optionIdToRecordDict }
+    =  optionIds
+    |> List.map
+       (Util.flip Dict.get <| optionIdToRecordDict)
+           |> List.filterMap identity
+
 
 {-| get a list of Option record data from the whole options by searching
 option ID in a Dict.
 
 The order of options in the same one of optionID list.
 -}
-getOptions : { state |
-               optionIds : List String
-             , optionIdToRecordDict : Dict String (Option vt msg)
-             } -> List (Option vt msg)
+getOptions : MinimalStateLike extraStat extraOpt vt msg ->
+             List (MinimalOptionLike extraOpt vt msg)
 
-getOptions { optionIds, optionIdToRecordDict }
-    = optionIds
-    |> List.map
-       (Util.flip Dict.get <| optionIdToRecordDict)
-
-    |> List.filterMap identity
+getOptions state
+    = getOptionsWrapped state
+    |> List.map .unwrap
 
 
 {-| Save options from the list of pair of ( data, Element )
@@ -583,26 +720,17 @@ there is no way to know how to make data value to string
 you should suggest the function (vt -> String)
 
 -}
-setOptions : (vt -> String) ->
-             List (vt, Element msg) ->
-             { state |
-               idString  : String
-             , optionIds : List String
-             , optionIdToRecordDict : Dict String (Option vt msg)
-             } ->
-             { state |
-               idString  : String
-             , optionIds : List String
-             , optionIdToRecordDict : Dict String (Option vt msg)
-             }
 
-setOptions toStringFn valueToElementPairs state
+setOptions : List ( String, OptionWrap extraOpt vt msg ) ->
+             StateUpdater extraStat extraOpt vt msg
+
+setOptions subIdToOptionPairs state
     = let
         optionIds
-            = valueToElementPairs
+            = subIdToOptionPairs
             |> List.map
-               (\(val, _) ->
-                    getOptionIdString toStringFn state.idString val
+               (\(subIdString, _) ->
+                    getOptionIdString identity state.idString subIdString
                )
 
         indexedOptionIds
@@ -610,14 +738,25 @@ setOptions toStringFn valueToElementPairs state
             |> List.indexedMap Tuple.pair
 
         optionIdToRecordDict
-            = (indexedOptionIds, valueToElementPairs)
+            = (indexedOptionIds, subIdToOptionPairs)
             |> (Util.uncurry <| List.map2
-                    (\(index, idString) (val, element) ->
-                         ( idString, Option idString index val element )
+                    (\(index, idString) (_, optionWrap) ->
+                         let option
+                                 = optionWrap.unwrap
+                         in
+                             ( idString
+                             , OptionWrap
+                                   { option | -- update proper value
+                                     idString
+                                         = idString
+                                   , index
+                                         = index
+                                   }
+                             )
                     )
                )
             |> Dict.fromList
-              
+
    in
        { state |
          optionIds
@@ -627,11 +766,12 @@ setOptions toStringFn valueToElementPairs state
              = optionIdToRecordDict
        }
 
+
 {-| Every scroll is being watched to check whether it is stopped at the moment
 and this function will change the timing to wait until checking.
 
-**Limitation:** minimum value is 75 (ms). Animation will fail or work unexpectedly
-under 75 ms.
+**Limitation:** minimum value is 75 (ms). Animation will fail or work
+unexpectedly under 75 ms.
 -}
 setScrollStopCheckTime : Int ->
                          { state |
@@ -645,7 +785,8 @@ setScrollStopCheckTime milliSeconds
     = unsafeSetScrollCheckTime (min 75 milliSeconds)
 
 
-{-| You can test any value -- even under 75 ms -- however which is not recommended
+{-| You can test any value -- even under 75 ms
+-- however which is not recommended
 -}
 unsafeSetScrollCheckTime : Int ->
                            { state |
@@ -676,31 +817,34 @@ getOptionIdString toStringFn pickerIdString optionValue
    in
        pickerIdString ++ concator ++ (optionValue |> toStringFn)
 
-    
 {-| Check the Msg, and return if there is any new selected option
 
 please check this [Example][exampleUpdate].
 -}
-anyNewOptionSelected : Msg vt msg -> Maybe (Option vt msg)
+anyNewOptionSelected : Msg extraOpt vt msg ->
+                       Maybe (MinimalOptionLike extraOpt vt msg)
 anyNewOptionSelected msg
-    =
-      case msg of
+    = case msg of
           ScrollPickerSuccess option ->
               Just option
           _ ->
               Nothing
 
+
 {-|
 minimal testing function if the picker is snapping to some item
 at the moment
 -}
-isSnapping : { state | targetIdString : Maybe String } -> Bool
+isSnapping : MinimalStateLike extraStat extraOptino vt msg ->
+             Bool
+
 isSnapping state
     = case state.targetIdString of
           Just _ ->
               True
           _ ->
               False
+
 
 {-|
 reset some states for runtime to stop snapping
@@ -712,19 +856,7 @@ will produce more animation after calling this function, so keep in mind
 that animation for snapping is not guaranteed to be done even if call this
 function in `model' part.
 -}
-stopSnapping : { state |
-                 targetIdString         : Maybe String
-               , finalTargetScrollPosMP : Int
-               , scrollTraceMP          : Set Int
-               , pseudoAnimState        : Animation.Messenger.State msg
-               } ->
-               { state |
-                 targetIdString         : Maybe String
-               , finalTargetScrollPosMP : Int
-               , scrollTraceMP          : Set Int
-               , pseudoAnimState        : Animation.Messenger.State msg
-               }
-
+stopSnapping : StateUpdater extraStat extraOpt vt msg
 stopSnapping state
     = { state |
         targetIdString
@@ -737,11 +869,48 @@ stopSnapping state
           initPseudoAnimState 0
       }
 
+{-| check if we already know which item is is near to the center
+-}
+hasCenterOption : MinimalStateLike extraStat extraOpt vt msg ->
+                  Bool
+hasCenterOption state
+    = case state.optionIdInTheCenter of
+          Just _ ->
+              True
+          _ ->
+              False
+
+{-| set the option as the nearest one to the center of frame
+-}
+setCenterOption : String -> Float -> Float ->
+                  MinimalStateLike extraStat extraOpt vt msg ->
+                  MinimalStateLike extraStat extraOpt vt msg
+setCenterOption centerOptionIdString basePos relPos state
+    = { state |
+        frameCenterPos
+            = basePos
+      , optionCenterRelPos
+            = relPos
+      , optionIdInTheCenter
+            = Just centerOptionIdString
+      }
+
+
+{-| reset the value for the option in the center
+-}
+resetCenterOption : MinimalStateLike extraStat extraOpt vt msg ->
+                    MinimalStateLike extraStat extraOpt vt msg
+resetCenterOption state
+    = { state |
+        optionIdInTheCenter
+            = Nothing
+      }
 
 -- -- -- Helper functions for Internal usage -- -- --
 
-{-| [`Browser.Dom.Viewport`](/packages/elm/browser/latest/Browser-Dom#Viewport), [`Browser.Dom.Element`](/packages/elm/browser/latest/Browser-Dom#Element) share basic record accessor
-like `.x`  `.y`  `.width`  `.height`
+{-| [`Browser.Dom.Viewport`](/packages/elm/browser/latest/Browser-Dom#Viewport),
+[`Browser.Dom.Element`](/packages/elm/browser/latest/Browser-Dom#Element)
+share basic record accessor like `.x`  `.y`  `.width`  `.height`
 
 getCenterPosOf function try to get center poisition of the some field.
 
@@ -773,27 +942,28 @@ getCenterPosOf posAccessor lengthAccessor boxAccessor record
 {-| mbCurrentOption represents an option apears to be near the center of the
 view frame and rest of them partitioned into two seprate list
 -}
-type alias OptionPartition vt msg
-    = { previousOptions : List  (Option vt msg)
-      , mbCurrentOption : Maybe (Option vt msg)
-      , nextOptions     : List  (Option vt msg)
+type alias OptionPartition extraOpt vt msg
+    = { previousOptions : List  (OptionWrap extraOpt vt msg)
+      , mbCurrentOption : Maybe (OptionWrap extraOpt vt msg)
+      , nextOptions     : List  (OptionWrap extraOpt vt msg)
       }
 
 {-| when all the items are distributed uniformly, it might be easier to
-get the option to focus(for snapping). partitionOptions will provide one
-candidate to snap and previous options prior to current one and next
-options as well.
+get the option to focus(for snapping). partitionOptions will provide some
+hints by offering (1) *one candidate* to snap and (2) *previous options*
+ prior to current one and (3) *next options*.
+
 Calulating relative position in Viewport probably be only way to test 
-whether the target is correct one or not, however you might need to check 
-around current candidate.
+whether the target is correct one or not, so you should check the candidates
+by checking relatiave position from the center of window frame.
+
+**Note:** previous options are in reversed order, so first item is closest
+to first sample and the last one is farthest.
 -}
-partitionOptionsHelper : ( Geom -> Float ) ->
-                         ( Geom -> Float ) ->
-                         { state |
-                           optionIdToRecordDict :
-                               Dict.Dict String (Option vt msg)
-                         , optionIds : List String
-                         } ->
+
+partitionOptionsHelper : (Geom -> Float) ->
+                         (Geom -> Float) ->
+                         MinimalStateLike extraStat extraOpt vt msg ->
                          { vp |
                            scene :
                                { d |
@@ -802,12 +972,14 @@ partitionOptionsHelper : ( Geom -> Float ) ->
                                }
                          , viewport : Geom
                          } ->
-                         (OptionPartition vt msg)
+                         (OptionPartition extraOpt vt msg)
+
 
 partitionOptionsHelper posAccessor lengthAccessor state viewport
     = let
         options
-            = getOptions state
+            = state
+            |> getOptionsWrapped
 
         sceneLength
             = { x = -1
@@ -854,7 +1026,7 @@ partitionOptionsHelper posAccessor lengthAccessor state viewport
         findFirstSample rp c n
            = let edgeCase rp_ c_ n_
                       = { previousOptions = rp_
-                        , mbCurrentOption   = c_
+                        , mbCurrentOption = c_
                         , nextOptions     = n_
                         }
 
@@ -867,8 +1039,9 @@ partitionOptionsHelper posAccessor lengthAccessor state viewport
                           edgeCase rp c n
 
                       _ ->
-                          -- if we drop too much and restOptions doesn't have any
-                          -- we will try another one from previousOptions (if still available)
+                          -- if we drop too much and restOptions doesn't
+                          -- have any, we will try another one from
+                          -- previousOptions (if still available)
                           findFirstSample
                           (rp |> List.drop 1)
                           (rp |> List.head)
@@ -947,9 +1120,10 @@ taskGetViewport idString
     |> Task.mapError DomError
 
 
-{-| Task helper to retreive the position. posAccessor
+{-| Task helper to retreive the position. posAccessor should find the 'x' or 'y'
+position from the Geom data type.
 -}
-taskGetViewportPosHelper : ( Geom -> Float ) ->
+taskGetViewportPosHelper : (Geom -> Float) ->
                            String ->
                            Task Error Float
 
@@ -959,16 +1133,60 @@ taskGetViewportPosHelper posAccessor idString
        (.viewport >> posAccessor >> Task.succeed)
 
 
-{-| An utility which converts an floating value to an integer value which contains
-upto milli of base unit (pixel in this case)
+{-| try to get the option item in the centre of a frame
+and return a Task to attempt as following action
+-}
+taskTriggerGetCenterOptionHelper
+    : (Geom -> Float) ->
+      (Geom -> Float) ->
+      MinimalStateLike extraStat extraOpt vt msg ->
+      String ->
+      (String -> Float -> Float ->
+       Msg extraOpt vt msg) ->
+      Task Error (Msg extraOpt vt msg)
+
+taskTriggerGetCenterOptionHelper posAccessor lengthAccessor state
+                                 frameIdString onSuccess
+
+    = taskGetViewport frameIdString
+    |> Task.andThen
+       (\vp ->
+            let { previousOptions, mbCurrentOption,
+                  nextOptions } = partitionOptionsHelper
+                                  posAccessor lengthAccessor state vp
+            in
+                case mbCurrentOption of
+                    Just firstSample ->
+                        Task.succeed <|
+                            CheckInitialTargetOption
+                            onSuccess
+                            previousOptions
+                            firstSample
+                            nextOptions
+
+                    Nothing ->
+                        -- which means no more previous option
+                        -- only need to check next ones.
+                        if List.isEmpty nextOptions then
+                            Task.fail NoOptionAvailable
+                        else
+                            Task.succeed <|
+                            DetermineTargetOption
+                            onSuccess <|
+                            Ok ( nextOptions, Nothing )
+       )
+
+
+{-| An utility which converts an floating value to an integer value which
+contains upto milli of base unit (pixel in this case)
 -}
 toMilliPixel : Float -> Int
 toMilliPixel floatVal
     = floatVal * 1000
     |> truncate
 
-{-| An utility which converts an integer value(which contains up to thousandth value
-of original) to an float value.
+{-| An utility which converts an integer value(which contains up to thousandth
+value of original) to an float value.
 -}
 fromMilliPixel : Int -> Float
 fromMilliPixel milliPixel
@@ -979,7 +1197,7 @@ fromMilliPixel milliPixel
 
 -- -- -- INIT (Model only; no Cmd) -- -- --
 
-{-| Helper function to initialise the minimal model. You can call 
+{-| Helper function to initialise the minimal state(model). You can call
 [`setOptions`](#setOptions) after this.
 
 ```elm
@@ -993,7 +1211,7 @@ fromMilliPixel milliPixel
 
 -}
 initMinimalState : String ->
-                   MinimalState vt msg
+                   MinimalState extraOpt vt msg
 
 initMinimalState idString
     = { idString
@@ -1017,6 +1235,12 @@ initMinimalState idString
             = -1
       , scrollStopCheckTime
             = 250 -- 250 ms
+      , optionIdInTheCenter
+            = Nothing
+      , frameCenterPos
+            = -1
+      , optionCenterRelPos
+            = -1
       }
 
 -- -- -- View -- -- --
@@ -1033,29 +1257,13 @@ This means the color listed above are should be in your own palette at least,
 even if you are using your own color accessor(function) with your theme.
 -}
 viewAsElement : { appModel |
-                  messageMapWith : (String -> (Msg vt msg) -> msg)
+                  messageMapWith : (String -> (Msg extraOpt vt msg) -> msg)
                 , pickerDirection : Direction
                 } ->
-                ( BaseTheme { palette |
-                              -- ^ minimal palette to work with.
-                              --   you should have even if don't use with
-                              --   your own 'BaseTheme' settings.
-                              accent : Color
-                            , surface : Color
-                            , background : Color
-                            , on : { paletteOn |
-                                     background : Color
-                                   , surface    : Color
-                                   }
-                            , toElmUiColor : Color -> Element.Color
-                            }
-                      msg
+                ( BaseTheme (MinimalPaletteLike pal
+                                 (MinimalPaletteOnLike palOn)) msg
                 ) ->
-                { state |
-                  idString   : String
-                , optionIds  : List String
-                , optionIdToRecordDict : Dict String (Option vt msg)
-                } ->
+                MinimalStateLike extraStat extraOpt vt msg ->
                 Element msg
 
 viewAsElement { messageMapWith, pickerDirection } theme state
@@ -1068,8 +1276,7 @@ viewAsElement { messageMapWith, pickerDirection } theme state
           cssOverFlowLongitudinal, cssOverFlowLateral,
           fontSize, borderWidth, shadeLength, pickerWidth, pickerLength } =
 
-            theme
-                |> defaultBaseSettingsWith pickerDirection
+            defaultBaseSettingsWith theme pickerDirection
 
 
         getColourWithDefault defFn customFn
@@ -1085,27 +1292,33 @@ viewAsElement { messageMapWith, pickerDirection } theme state
 
         makeShadeAttrs startEnd
             = ( theme.shadeAttrsFn
-                  |> Theme.withDefault (defaultShadeAttrsWith theme)
+                  |> Theme.withDefault
+                     (defaultShadeAttrsWith theme)
               )
               pickerDirection startEnd
- 
-        
+
+        paddingLength
+            = (shadeLength |> toFloat) * 1.5 |> round
+
         viewPickerPaddingElement
-            = el [ (shadeLength |> toFloat) * 1.5 |> round |> px |> lengthSetter
+            = el [ paddingLength |> px |> lengthSetter
                   , fill |> widthSetter
                  ] <| none
               -- ^ need some padding to centerize first and last item
-              --   (or we can use padding ???
+              --   (or we can use padding ???)
 
         viewPicker
             = Html.Styled.div
-              [ css [ Css.pseudoElement "-webkit-scrollbar" [ Css.display Css.none ]
-                    -- no standard
+              [ css [ Css.pseudoElement "-webkit-scrollbar"
+                                        -- ^ no standard
+                          [ Css.display Css.none ]
+
                     , Css.property "scrollbar-width" "none" -- standard
                     , cssWidthSetter <| Css.pct 100
                     , Css.border <| Css.px 5
                     , Css.borderColor <|
-                        getStyledColourWithDefault (.on >> .background) theme.borderColorFn
+                        getStyledColourWithDefault (.on >> .background)
+                            theme.borderColorFn
                     , cssOverFlowLongitudinal Css.scroll
                     , cssOverFlowLateral Css.hidden
                     ]
@@ -1115,8 +1328,8 @@ viewAsElement { messageMapWith, pickerDirection } theme state
                   Decode.succeed <| messageMap OnScroll
               ]
 
-              -- this isn't consistent solution but I don't want to think more about css
-              -- so I'm going back to elm-ui.
+              -- this isn't consistent solution but I don't want to think more
+              -- about css, so I'm going back to elm-ui.
               [ ( layoutWith { options = [ Element.noStaticStyleSheet ] }
                       [] <|
 
@@ -1132,12 +1345,13 @@ viewAsElement { messageMapWith, pickerDirection } theme state
                       ]
                       ( List.concat
                             [ [ viewPickerPaddingElement ]
- 
+
                             , getOptions state
                                 |> List.map
                                    (\opt ->
-                                        el [ opt.idString |> MAttr.id 
-                                           , pickerLength - shadeLength * 2 |> px |> lengthSetter
+                                        el [ opt.idString |> MAttr.id
+                                           , pickerLength - shadeLength * 2
+                                             |> px |> lengthSetter
                                            , centerLateral
                                            ] <|
                                         el [ centerX
@@ -1160,10 +1374,10 @@ viewAsElement { messageMapWith, pickerDirection } theme state
                    |> getColourWithDefault .surface
                    |> theme.palette.toElmUiColor
              )
-                   
+
          , inFront <| -- shading at the beginning
              el (makeShadeAttrs Start) <| none
-         -- v window to see the selected item
+         -- v  window to see the selected item
          , inFront <|
              el [ MAttr.positionAbsolute
                 , MAttr.passPointerEvents
@@ -1177,7 +1391,8 @@ viewAsElement { messageMapWith, pickerDirection } theme state
                     )
 
                 , pickerWidthSetter
-                , (pickerLength - (shadeLength - borderWidth) * 2) |> px |> lengthSetter
+                , (pickerLength - (shadeLength - borderWidth) * 2)
+                    |> px |> lengthSetter
                 ] <| none
 
          , inFront <| -- shading at the end
@@ -1196,44 +1411,24 @@ As other update function supposed to do, updateWith also does the job
 described in the [`Msg`](#Msg) of the module.
 
 -}
-updateWith : { a |
-               messageMapWith : (String -> (Msg vt msg) -> msg)
+updateWith : { appModel |
+               messageMapWith : (String -> (Msg extraOpt vt msg) -> msg)
              , pickerDirection : Direction
              } ->
-             Msg vt msg ->
-             { b |
-               idString                 : String
-             , lastScrollClock          : Time.Posix
-             , scrollTraceMP            : Set Int
-             , finalTargetScrollPosMP   : Int
-             , scrollStopCheckTime      : Int
-             , optionIdToRecordDict     : Dict String (Option vt msg)
-             , optionIds                : List String
-             , pseudoAnimState          : Animation.Messenger.State msg
-             , targetIdString           : Maybe String
-             } ->
-             ( { b |
-                 idString                  : String
-               , lastScrollClock           : Time.Posix
-               , scrollTraceMP            : Set Int
-               , finalTargetScrollPosMP   : Int
-               , scrollStopCheckTime       : Int
-               , optionIdToRecordDict      : Dict String (Option vt msg)
-               , optionIds                 : List String
-               , pseudoAnimState           : Animation.Messenger.State msg
-               , targetIdString            :   Maybe String
-               }
+             Msg extraOpt vt msg ->
+             MinimalStateLike extraStat extraOpt vt msg ->
+             ( MinimalStateLike extraStat extraOpt vt msg
              , Cmd msg
              )
-       
+
 updateWith { messageMapWith, pickerDirection } msg state
     = let
         messageMap
             = messageMapWith state.idString
 
         getMaybeAnimProperty animState propName
-            -- `elm-style-animation' doesn't seem to supply the low level accessor
-            -- and pseudoAnimState has only one member so...
+            -- `elm-style-animation' doesn't seem to supply the low level
+            -- accessor and pseudoAnimState has only one member so...
             -- otherwise we need to use Dict.fromList |> Dict.get ...
             = Animation.renderPairs animState
             |> Dict.fromList
@@ -1255,6 +1450,9 @@ updateWith { messageMapWith, pickerDirection } msg state
         taskGetViewportPos
             = taskGetViewportPosHelper posAccessor
 
+        taskTriggerGetCenterOption
+            = taskTriggerGetCenterOptionHelper posAccessor lengthAccessor state
+
         taskSetViewport idstr newPos
             = let
                 setViewPortOf
@@ -1267,7 +1465,7 @@ updateWith { messageMapWith, pickerDirection } msg state
                          setViewPortOf 0 newPos
                ) |> Task.mapError DomError
 
-
+               
         isInScrollTraceHelper mp
             = {-(Debug.log "scroll trace:"-} state.scrollTraceMP{-)-}
             |> Set.toList
@@ -1278,7 +1476,7 @@ updateWith { messageMapWith, pickerDirection } msg state
                         |> (*) 1000
                -- ^ truncate as a pixel value (not milli pixel)
                )
-            
+
         isInScrollTrace mp -- milli pixel
             = isInScrollTraceHelper mp
             |> List.member 0
@@ -1289,16 +1487,17 @@ updateWith { messageMapWith, pickerDirection } msg state
               >> toFloat
 
 
-   in case msg of
+   in
+       case msg of
            OnScroll ->
                -- we are unable to distinguish between a scroll event whether
-               -- user made or another which Browser.Dom.setViewport generated,
+               -- made from user or programatically generated.
+               --    (Browser.Dom.setViewport)
                -- we will check the viewport position against the any position
                -- animated during runtime.
-
                ( state
                , if state |> isSnapping then
-                     taskGetViewport state.idString
+                      taskGetViewport state.idString
                         |> Task.andThen
                            (\vp ->
                                 let vpPos
@@ -1306,34 +1505,49 @@ updateWith { messageMapWith, pickerDirection } msg state
                                     vpPosMP
                                         = vpPos |> toMilliPixel
 
-                                in
-                                    if vpPosMP |> isInScrollTrace then
-                                        -- event from module => ignore
-                                        Task.succeed (Debug.log "from module" True)
-                                                          -- still anmatiting ^
-                                    else
-                                        Debug.log "from user" <|
-                                        Task.succeed False
-                                                  -- ^ do not keep animation
-                           )
+                               in
+                                   if vpPosMP |> isInScrollTrace then
+                                       -- event from module => ignore
+                                       Task.succeed (Debug.log "from module"
+                                                         True)
+                                      -- still animating ^
+                                   else
+                                       Debug.log "from user" <|
+                                       Task.succeed False
+                                                 -- ^ do not keep animation
+                           ) --^ result in 'keepAnimation'
                         |> Task.map2
                            Tuple.pair Time.now  -- i.e) (clock, keepAnimation)
                         |> Task.attempt
                            (\res ->
-                                case res of
-                                    Ok (clock, keepAnimation) ->
-                                        messageMap <| SyncLastScroll clock keepAnimation
-                                    _ ->
-                                        messageMap <| NoOp
+                                messageMap <|
+                                    case res of
+                                        Ok (clock, keepAnimation) ->
+                                            SyncLastScroll clock keepAnimation
+                                        Err detailError ->
+                                            ScrollPickerFailure "OnScroll"
+                                            "taskGetViewport maybe failed."
+                                            detailError
                            )
 
-                 else
-                     Task.perform
-                     (messageMap << (Util.flip SyncLastScroll) False)
-                     (Debug.log "user scroll:" Time.now)
+                  else -- not even snapping: user scroll
+                      Task.perform
+                      (messageMap << (Util.flip SyncLastScroll) False)
+                      Time.now
                )
+               {- goingt to be implemented in ScrollPicker not BaseScrollPicker
+               |> Tuple.mapSecond
+                  (\origCmd ->
+                       Cmd.batch
+                       [ origCmd
+                       , Task.perform
+                         (messageMap << FindCenterOption)
+                         (Task.succeed SyncCenterOption)
+                       ]
+                  )
+                -}
 
-           OnKey keyCodeString ->
+           OnKey keyCodeString -> -- not used yet.
                let _ = Debug.log "key code:"
                in
                    ( state, Cmd.none )
@@ -1344,16 +1558,18 @@ updateWith { messageMapWith, pickerDirection } msg state
 
                  else
                      ( state |> stopSnapping
-                     -- v and check the scrolling is stopped after few milli seconds
-                     -- to try another snapping
-                     , Process.sleep (toFloat state.scrollStopCheckTime)
+                     -- v .. and check the scrolling is stopped after
+                     --      few milli seconds to try another snapping
+                     ,
+                         Process.sleep (toFloat state.scrollStopCheckTime)
                         |> Task.andThen
                            (always Time.now)
                         |> Task.perform (messageMap << TriggerSnapping)
                      )
                ) |> Tuple.mapFirst
-                    ( \m -> { m | lastScrollClock = clock } )
-
+                    (\m ->
+                         { m | lastScrollClock = clock }
+                    )
 
            TriggerSnapping now ->
                if state |> isSnapping then
@@ -1364,93 +1580,90 @@ updateWith { messageMapWith, pickerDirection } msg state
                            state.lastScrollClock + state.scrollStopCheckTime)
                        <= Time.posixToMillis now
                    then
-                       -- scroll is stopped at least during `scrollStopCheckTime'
+                       -- scroll has been stopped within `scrollStopCheckTime'
                        -- : start to snap to approriate option
 
-                       ( state
-                       , taskGetViewport state.idString
-                           |> Task.andThen
-                              ( \vp ->
-                                    let { previousOptions, mbCurrentOption, nextOptions } = partitionOptions state vp
-                                    in
-                                        case mbCurrentOption of
-                                            Just firstSample ->
-                                                Task.succeed <|
-                                                CheckInitialTargetOption
-                                                previousOptions
-                                                firstSample
-                                                nextOptions
+                       if state |> hasCenterOption then
+                           ( state
+                           , Task.perform identity <|
+                             Task.succeed <|
+                             messageMap <|
+                             case state.optionIdInTheCenter of
+                                 Just optionId ->
+                                     SetSnapToTargetOption
+                                         optionId
+                                         state.frameCenterPos
+                                         state.optionCenterRelPos
+                                 _ ->
+                                     ScrollPickerFailure "TriggerSnapping"
+                                         "center option supposed to be available but not."
+                                         CenterOptionUnavailable
+                           )
+                       else
+                           ( state
+                             -- or let's find out now and snap again
+                           , Task.perform
+                             (messageMap << FindCenterOption)
+                             (Task.succeed SetSnapToTargetOption)
+                           )
 
-                                            Nothing ->
-                                                if List.isEmpty nextOptions then
-                                                    Task.fail NoOptionAvailable
-                                                else
-                                                    Task.succeed <|
-                                                    DetermineTargetOption <|
-                                                    Ok ( nextOptions, Nothing )
-                              )
-                           |> Task.attempt
-                              (\res ->
-                                   case res of
-                                       Ok targetOptionMsg ->
-                                           messageMap targetOptionMsg
-                                       Err x ->
-                                           let _ = Debug.log "error:" x
-                                           in
-                                               messageMap NoOp
-                              )
-                       )
                    else
                        -- another scroll happened within "Animation duration"
                        -- wait until new animation ready
                        ( state, Cmd.none )
 
 
-           CheckInitialTargetOption prevOpts currOpt nextOpts ->
+           CheckInitialTargetOption onSuccess
+                                    prevOpts
+                                    currOptWrap
+                                    nextOpts ->
                ( state
-               , taskTargetOptionRelPos state.idString currOpt.idString
+               , taskTargetOptionRelPos state.idString currOptWrap.unwrap.idString
                    |> Task.andThen
                       (\relativePos ->
                            Task.succeed
                            (if relativePos > 0.0 then
                                 prevOpts -- check (to the left | upward)
                                          -- no meaning to check right hand side
-                                         -- it will only increase the relative poisition
+                                         -- it will only go far way
                                          -- in the same direction
                             else
                                 nextOpts -- check (to the right | downward)
-                           , Just ( currOpt.idString, relativePos )
+                           , Just ( currOptWrap.unwrap.idString, relativePos )
                            )
                       )
                    |> Task.attempt
-                      (messageMap << DetermineTargetOption)
+                      ( messageMap << (DetermineTargetOption onSuccess) )
                )
-                   
-           DetermineTargetOption resCandidates ->
+
+           DetermineTargetOption onSuccess resCandidates ->
                ( state
                , case resCandidates of
                      Ok ( candidates, Nothing ) ->
-                         -- checking first sample from candidates
+                         -- no initial best candidates so far :
+                         --   checking first sample from candidates
                          let
                              mbCandi = List.head candidates
                          in
                              case mbCandi of
-                                 Just candi ->
+                                 Just candiWrap ->
                                      taskTargetOptionRelPos
                                          state.idString
-                                         candi.idString
-                                             |> Task.andThen
-                                                (\relativePos ->
-                                                     Task.succeed <|
-                                                     ( candidates |> List.drop 1
-                                                     , Just
-                                                         ( candi.idString
-                                                         , relativePos
-                                                         )
-                                                     )
-                                                )
-                                             |> Task.attempt
-                                                (Debug.log "test" << messageMap << DetermineTargetOption)
+                                         candiWrap.unwrap.idString
+                                     |> Task.andThen
+                                        (\relativePos ->
+                                             Task.succeed <|
+                                             ( candidates
+                                                |> List.drop 1
+                                             , Just -- new sample to check next time
+                                                   ( candiWrap.unwrap.idString
+                                                   , relativePos
+                                                   )
+                                             )
+                                        )
+                                     |> Task.attempt
+                                        (messageMap
+                                             << DetermineTargetOption onSuccess)
 
                                  Nothing ->
                                      -- this is not possible case
@@ -1460,72 +1673,126 @@ updateWith { messageMapWith, pickerDirection } msg state
                          let
                              mbCandi = List.head candidates
 
-                             setTargetOption : (Option vt msg) ->
+                             setTargetOption : (MinimalOptionLike
+                                                    extraOpt vt msg) ->
                                                (Result Error (Float, Float)) ->
-                                               (Msg vt msg)
- 
-                             setTargetOption candi resOfGetStartAndRelPos
+                                               (Msg extraOpt vt msg)
+
+                             setTargetOption candi
+                                             resOfGetStartAndRelPos
+
                                  = case resOfGetStartAndRelPos of
                                        Ok (startPos, candiRelPos) ->
                                            if abs candiRelPos <= abs relPos then
-                                                   -- compare to previous record
-                                                   -- and check next one to decide
-                                                   DetermineTargetOption <|
-                                                       Ok ( candidates
-                                                                |> List.drop 1
-                                                          -- ^ Ok is needed because
-                                                          -- not using Task.attempt
-                                                          -- but using Task.perform
-                                                          , Just
-                                                                ( candi.idString
-                                                                , candiRelPos
-                                                                )
-                                                          )
-                                               else
-                                                   -- use previous one as a target
-                                                   SetSnapToTargetOption
-                                                       idString startPos relPos
-                                       _ ->
-                                           NoOp -- probably needs log
+                                               -- compare to previous record
+                                               -- and current candidate is
+                                               -- closer to center but
+                                               -- will check next one to decide
+                                               DetermineTargetOption
+                                                   onSuccess <|
+                                                   Ok ( candidates
+                                                        |> List.drop 1
+                                               -- ^ Ok is needed because
+                                               --   not using Task.attempt
+                                               --   but using Task.perform
+                                                      , Just
+                                                            ( candi.idString
+                                                            , candiRelPos
+                                                            )
+                                                      )
+                                           else
+                                               -- use previous one as a target
+                                               onSuccess
+                                                   idString startPos relPos
+
+                                       Err detailError ->
+                                            ScrollPickerFailure "DetermineTargetOption"
+                                            "setTargetOption failed from previous error."
+                                            detailError
+
                          in
                              case mbCandi of
-                                 Just candi ->
+                                 Just candiWrap ->
                                      taskTargetOptionRelPos
-                                         state.idString candi.idString
+                                       state.idString candiWrap.unwrap.idString
                                          |> Task.map2
-                                            Tuple.pair (state.idString
-                                                            |> taskGetViewportPos)
-                                               
+                                            Tuple.pair
+                                            (state.idString
+                                                |> taskGetViewportPos)
+
                                          |> Task.attempt
-                                            (messageMap << setTargetOption candi)
- 
+                                            (messageMap
+                                                 << setTargetOption
+                                                 candiWrap.unwrap
+                                            )
+
                                  Nothing ->
                                      -- no more option
                                      -- use last one as target option
-                                     (state.idString |> taskGetViewportPos)
-                                            |> Task.attempt
-                                               (\res ->
-                                                    case res of
-                                                        Ok startPos ->
-                                                            messageMap <|
-                                                                SetSnapToTargetOption
-                                                                    idString startPos relPos
-                                                        _ ->
-                                                            messageMap <|
-                                                                NoOp
-                                               )
+                                     ( state.idString |> taskGetViewportPos )
+                                         |> Task.attempt
+                                            (\res ->
+                                                messageMap <|
+                                                     case res of
+                                                         Ok startPos ->
+                                                             onSuccess
+                                                             idString
+                                                             startPos relPos
 
-                     Err _ ->
-                         -- may be log something ...
-                         Cmd.none
+                                                         Err detailError ->
+                                                             ScrollPickerFailure
+                                                             "DetermineTargetOption"
+                                                             ( "no more option but "
+                                                               ++ "taskGetViewportPos"
+                                                               ++ "failed."
+                                                             )
+                                                             detailError
+                                            )
+
+                     Err detailError ->
+                         Task.perform identity <|
+                         Task.succeed <|
+                         messageMap <|
+                             ScrollPickerFailure
+                             "DetermineTargetOption"
+                             "failed to get candidates"
+                             detailError
+
                )
 
-           SetSnapToTargetOption idString startPos relPos ->
+           FindCenterOption onSuccess ->
+               ( state
+               , taskTriggerGetCenterOption
+                   state.idString
+                   onSuccess
+                 |> Task.attempt
+                    (\res ->
+                         messageMap <|
+                         case res of
+                             Ok targetOptionMsg ->
+                                 targetOptionMsg
+
+                             Err detailError ->
+                                ScrollPickerFailure
+                                "FindCenterOption: "
+                                "taskTrggerGetCenterOption failed."
+                                detailError
+                    )
+               )
+
+           SyncCenterOption centerOptionIdString basePos relPos ->
+               ( state
+                   |> setCenterOption
+                      centerOptionIdString basePos relPos
+               , Cmd.none
+               )
+
+           SetSnapToTargetOption idString basePos relPos ->
                let targetScrollPos
-                       = startPos + relPos
+                       = basePos + relPos
                        |> cleanScrollPos
                in
-                   -- set animation 
+                   -- set animation
                    ( { state |
                        targetIdString
                            = Just idString
@@ -1535,17 +1802,17 @@ updateWith { messageMapWith, pickerDirection } msg state
                            |> toMilliPixel
 
                      , pseudoAnimState
-                           = initPseudoAnimState startPos
+                           = initPseudoAnimState basePos
                            |> Animation.interrupt
                               [ Animation.to
                                     [  scrollPosProperty <| targetScrollPos
                                     ]
-
                               -- XXX how about animation duration ???
                               -- Change Animation.to -> Animation.toWith
                               -- or when making style using styleWith instead
                               ]
                      }
+
                    , Cmd.none
                    )
 
@@ -1558,52 +1825,58 @@ updateWith { messageMapWith, pickerDirection } msg state
                  , taskTargetOptionRelPos state.idString optionIdString )
                    |> (Util.uncurry <|
                            Task.map2 Tuple.pair
-                      )
+                      )  -- ^ takes two tasks above and make a pair
                    |> Task.attempt
                       (\res ->
+                           messageMap <|
                            case res of
                                Ok ( basePos, relPos ) ->
-                                   messageMap <|
                                    SetSnapToTargetOption
                                    optionIdString basePos relPos
                                _ ->
-                                   messageMap NoOp
-                      )
+                                   NoOp
+                       )
 
                )
-                   
+
            ScrollPickerSuccess option ->
                ( if state.targetIdString == (Just option.idString) then
-                     state |> stopSnapping
+                     state
+                        |> stopSnapping
+                        |> resetCenterOption
+
                  else
                      state
 
-               , Debug.log "success" Cmd.none                -- XXX : need to focus ??
-               ) 
-
-           ScrollPickerFailure _ ->
-               ( state
-               , Cmd.none                -- XXX : maybe log ??
+               , Cmd.none               -- need to focus ??
                )
+
+           ScrollPickerFailure context detailString detailError ->
+               let _ = Debug.log context detailString
+               in
+                   -- handle error or log here
+                   ( state
+                   , Cmd.none
+                   )
 
            Animate animMsg ->
                let
                    ( newAnimState, animCmd )
                        = Animation.Messenger.update
-                                 animMsg
-                                     state.pseudoAnimState
+                         animMsg
+                         state.pseudoAnimState
 
                    mbNewViewportPos
                        = if state |> isSnapping then
                              getMaybeAnimProperty
                              newAnimState scrollPosPropertyName
-                                 |> Maybe.map String.toFloat
+                                 |> Maybe.andThen String.toFloat
                          else
                              Nothing
 
                in
                    case mbNewViewportPos of
-                       Just (Just newViewportPos) ->
+                       Just newViewportPos ->
                            let newViewportPosMP
                                    = newViewportPos
                                    |> toMilliPixel
@@ -1618,13 +1891,13 @@ updateWith { messageMapWith, pickerDirection } msg state
                                        = newAnimState
                                  , scrollTraceMP
                                      = scrollTraceMP
-                                     -- this value is not quite synchronized with
-                                     -- 'OnScroll' Msg which catches the event later
-                                     -- than one or two Animation happened already.
+                                     -- this value is not quite synchronize
+                                     -- with 'OnScroll' Msg which catches the
+                                     -- event later than one or two Animation
+                                     -- happened already.
                                      -- So we will follow the trace of Animation
-                                     -- position to check any 'scroll' events made
-                                     -- from the this module in the end.
-                                        
+                                     -- position to check any 'scroll' events
+                                     -- made from the this module in the end.
                                  }
                                , Cmd.batch
                                      [ ( if (state.finalTargetScrollPosMP
@@ -1635,15 +1908,15 @@ updateWith { messageMapWith, pickerDirection } msg state
                                              --  once which probably mean
                                              --  the viewport already at the destination
                                              case state.targetIdString
-                                                    |> Maybe.map
+                                                    |> Maybe.andThen
                                                        ((Util.flip Dict.get)
                                                             state.optionIdToRecordDict)
                                              of
-                                                 Just (Just targetIdString) ->
+                                                 Just targetOptionWrap ->
                                                      Task.succeed <|
                                                          ScrollPickerSuccess
-                                                         targetIdString
-                                                         
+                                                         targetOptionWrap.unwrap
+
                                                  _ ->
                                                      Task.fail <|
                                                          InvalidOptionId
@@ -1684,7 +1957,7 @@ updateWith { messageMapWith, pickerDirection } msg state
            NoOp ->
                ( state, Cmd.none )
 
-                   
+
 -- -- -- SUBSCRIPTIONS -- -- --
 
 {-| -}
@@ -1695,8 +1968,8 @@ subscriptionsWithHelper : (String -> Animation.Msg -> msg) ->
                                } ->
                           Sub msg
 
-subscriptionsWithHelper animMessageMapWith pickerRecords
-    = pickerRecords
+subscriptionsWithHelper animMessageMapWith pickerStates
+    = pickerStates
     |> List.map
        (\{idString, pseudoAnimState} ->
             Animation.subscription
@@ -1704,27 +1977,16 @@ subscriptionsWithHelper animMessageMapWith pickerRecords
             [ pseudoAnimState ]
        )
     |> Sub.batch
-    
 
 {-| Pass the list of the scroll states with your own application model
 to inform the function `messageMapWith` function, and you will get
 subscription (Sub msg).
 
-**Important:** no animation will work withought subscriptions!!!
+**Important:** no animation will work without subscriptions!!!
 -}
-subscriptionsWith : List { state |
-                           idString                 : String
-                         , lastScrollClock          : Time.Posix
-                         , scrollTraceMP            : Set Int
-                         , finalTargetScrollPosMP   : Int
-                         , scrollStopCheckTime      : Int
-                         , optionIdToRecordDict     : Dict String (Option vt msg)
-                         , optionIds                : List String
-                         , pseudoAnimState          : Animation.Messenger.State msg
-                         , targetIdString           : Maybe String
-                         } ->
+subscriptionsWith : List (MinimalStateLike extraStat extraOpt vt msg) ->
                     { model |
-                      messageMapWith : (String -> (Msg vt msg) -> msg)
+                      messageMapWith : (String -> (Msg extraOpt vt msg) -> msg)
                     } ->
                     Sub msg
 
@@ -1733,229 +1995,3 @@ subscriptionsWith pickerStates model
     |> subscriptionsWithHelper
        (\idString ->
             model.messageMapWith idString << Animate)
-
-
--- -- -- SIMPLE EXAMPLE -- -- --
-
-{-| This module has internal state so all the message
-required to wrap (or map) to the your own Msg type.
-
-**Note:** Int type in (Msg *Int* ExampleMsg) is the type for options.
-Please Checkout [`Option`](#option) for further information.
--}
-type ExampleMsg
-    = ScrollPickerMessage String (Msg Int ExampleMsg)
-
-
-{-| There are two separate picker in this example, first picker will choose
-hour value, second one will choose minute value. and to deal with proper model
-with update, messageMapWith will take a id(String) as first argument.
-
-**Note:** pickerDirection means scrolling [`Direction`](#direction). And the name of
-messageMapWith, pickerDirection is used in the [`scrollPicker`](#scrollPicker)
-so it might be handy if you keep the same name.
--}
-type alias ExampleModel
-    = { firstPickerState  : MinimalState Int ExampleMsg
-      , secondPickerState : MinimalState Int ExampleMsg
-      , messageMapWith    : String -> (Msg Int ExampleMsg) -> ExampleMsg
-      , pickerDirection   : Direction
-      , hourValue         : Int
-      , minuteValue       : Int
-      }
-
-
-{- not used here
-onScroll : msg -> Attribute msg
-onScroll msg
-    = HtmlEvents.on "scroll" (Decode.succeed msg)
-    |> htmlAttribute
--}                      
-
-{-| Initialise our example model. Each picker model can be initialised with
-[`initMinimalState`](#initMinimalState) and [`setOptions`](#setOptions)
-
-And you might need to set default value for the picker.
-how the example does
--}
-exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
-exampleInit flags
-    = ( { firstPickerState -- for hour value
-              = initMinimalState "firstScrollPicker"
-                |> setOptions
-                   (String.fromInt)
-                   (List.range 1 12
-                      |> List.map
-                         ( \n -> ( n
-                                 , n |> ( String.fromInt >> text )
-                                 )
-                         )
-                   )
-                |> setScrollStopCheckTime 75
-
-        , secondPickerState -- for minute value
-              = initMinimalState "secondScrollPicker"
-                |> setOptions
-                   (String.fromInt)
-                   (List.range 0 59
-                      |> List.map
-                         ( \n -> ( n
-                                 , n |> ( String.fromInt
-                                              >> String.padLeft 2 '0'
-                                              >> text
-                                        )
-                                 )
-                         )
-                   )
-
-        , messageMapWith = ScrollPickerMessage
-          -- ^ a map function to wrap the picker messages into the ExampleMsg
-        , pickerDirection = Vertical
-        , hourValue = 5
-        , minuteValue = 32
-        }              
-
-      -- v focus to initial values
-      , [ ( "firstScrollPicker", 5 )
-        , ( "secondScrollPicker" , 32) ]
-        |> List.map
-           ( \(pickerIdString, optionValue) ->
-                 Task.perform identity <|
-                     Task.succeed <| ScrollPickerMessage pickerIdString <|
-                         MoveToTargetOption <| getOptionIdString
-                                               String.fromInt
-                                               pickerIdString optionValue
-           )
-      |> Cmd.batch
-      )
-
-{-| and inside your update function you can check picker Id and update approriate
-picker model.
-
-**Suggestion**: You can put your picker model into Dict or List depends on your
-preference.
--}
-exampleUpdate : ExampleMsg -> ExampleModel -> ( ExampleModel, Cmd ExampleMsg )
-exampleUpdate msg model
-    = let update
-              = updateWith model
-      in
-          case msg of
-              ScrollPickerMessage idString pickerMsg ->
-                  case idString of
-                      "firstScrollPicker" ->
-                          let ( firstPickerState, cmd )
-                                  = update pickerMsg model.firstPickerState
-
-                              newModel
-                                  = { model |
-                                      firstPickerState
-                                          = firstPickerState
-                                    }
-                                  
-                          in ( case anyNewOptionSelected pickerMsg of
-                                   Just option ->
-                                       { newModel |
-                                         hourValue = option.value
-                                       }
-                                   Nothing ->
-                                       newModel
-                               , cmd
-                             )
-
-                      "secondScrollPicker" ->
-                          let ( secondPickerState, cmd )
-                                  = update pickerMsg model.secondPickerState
-
-                              newModel
-                                  = { model |
-                                      secondPickerState
-                                          = secondPickerState
-                                    }
-                                  
-                          in ( case anyNewOptionSelected pickerMsg of
-                                   Just option ->
-                                       { newModel |
-                                         minuteValue = option.value
-                                       }
-                                   Nothing ->
-                                       newModel
-                               , cmd
-                             )
-
-                      _ ->
-                          ( model, Cmd.none )
-
-{-| exampleView shows how to reveal the model on the page by using elm-ui
-check out which settings you can change [`defaultTheme`](#defaultTheme)
--}
-exampleView : ExampleModel -> Html ExampleMsg
-exampleView model
-    = let
-        theme
-            = defaultTheme
-
-        pickerHelper
-            = viewAsElement model theme
-
-   in
-       layout [ Background.color (theme.palette.on.surface -- use same color as shade
-                                      |> theme.palette.toElmUiColor)
-              ] <|
-           column [ centerX
-                  , centerY
-                  ]
-               [ row [ spacing 1
-                     ]
-                     [ pickerHelper model.firstPickerState
-                     , pickerHelper model.secondPickerState
-                     ]
-
-               , el [ MAttr.paddingTop 20
-                    , Font.size
-                        ( defaultFontSize
-                              |> toFloat
-                              |> (*) 0.7
-                              |> truncate
-                        )
-                    , Font.color
-                          ( theme.palette.secondary
-                                |> theme.palette.toElmUiColor )
-                    , centerX
-                    ] <|
-                   text <| "It's " ++
-                       ( model.hourValue
-                             |> String.fromInt
-                       ) ++ ":" ++
-                       ( model.minuteValue
-                             |> String.fromInt
-                             |> String.padLeft 2 '0'
-                       )
-           ]
- 
-
-
-{-| Scroll picker relies on animation by using elm-style-animation
-so subscriptions is essential to work with this module this is acheived easily.
--}
-exampleSubscriptions : ExampleModel -> Sub ExampleMsg
-exampleSubscriptions model
-    = Sub.batch
-      [ model
-          |> subscriptionsWith
-             [ model.firstPickerState
-             , model.secondPickerState
-             ]
-      ]
-
-
-{-| Finally you can make main function with all the functions associated.
--}
-main : Program () ExampleModel ExampleMsg
-main
-    = Browser.element
-      { init = exampleInit
-      , view = exampleView
-      , update = exampleUpdate
-      , subscriptions = exampleSubscriptions
-      }
