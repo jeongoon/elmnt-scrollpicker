@@ -1,7 +1,7 @@
-module TwoPickers
-        exposing ( .. )
+module ClockTellerWithMinimalScrollPicker
+        exposing ( main )
 
-{-| This first example shows how to use BaseScrollPicker
+{-| This first example shows how to use MinimalScrollPicker
 -}
 
 import Dict                                     exposing (Dict)
@@ -12,7 +12,7 @@ import Element                                  exposing ( .. )
 import Element.Font             as Font
 import Element.Background       as Background
 
-import Elmnt.BaseScrollPicker   as ScrollPicker
+import Elmnt.MinimalScrollPicker   as ScrollPicker
 
 import Browser
 
@@ -74,87 +74,90 @@ type alias ExampleModel
 
 
 {-| Initialise our example model. Each picker model can be initialised with
-[`initMinimalStateWith`](#initMinimalStatewith) and [`setOptions`](#setOptions)
+[`initBasicState`] and [`setOptions`]
 
 And you might need to set default value for the picker.
 how the example does
 -}
 exampleInit : () -> ( ExampleModel, Cmd ExampleMsg )
 exampleInit flags
-    = ( { firstPickerState -- for hour value
-              = ( ScrollPicker.initMinimalState  "firstScrollPicker"
-                    |> ScrollPicker.setOptions
-                       ( List.range 1 12
-                          |> List.map
-                             ( \n ->
-                                   ( n
-                                     |> String.fromInt
-                                   , ScrollPicker.OptionWrap
-                                     { idString
-                                           = ""
-                                     , index
-                                           = -1
-                                     , value
-                                           = n
-                                     , element
-                                           = n
-                                           |> ( String.fromInt >> text )
-                                     }
-                                   )
+    = let
+        initModel
+            = { firstPickerState -- for hour value
+                    = ( ScrollPicker.initMinimalState "firstScrollPicker"
+                          |> ScrollPicker.setOptions
+                             ( List.range 1 12
+                                 |> List.map
+                                    ( \n ->
+                                          ( n
+                                             |> String.fromInt -- sub id string
+                                             |> ScrollPicker.asOptionSubId
+
+                                          , ScrollPicker.wrapOption
+                                            { idString
+                                                  = ""
+                                            , index
+                                                  = -1
+                                            , value
+                                                  = n
+                                            , element
+                                                  = n
+                                                  |> ( String.fromInt >> text )
+                                            }
+                                          )
+                                    )
                              )
-                       )
-                )
---              |> ScrollPicker.setScrollStopCheckTime 75
-
-        , secondPickerState -- for minute value
-              = --ScrollPicker.StateWrap
-                ( ScrollPicker.initMinimalState "secondScrollPicker"
-                   |> ScrollPicker.setOptions
-                      (List.range 0 59
-                        |> List.map
-                           ( \n -> ( n
-                                     |> String.fromInt -- sub id string
-                                   , ScrollPicker.OptionWrap
-                                     { idString      -- will be updated when setOption
-                                           = ""
-                                     , index
-                                           = -1      -- will be updated also
-                                     , value
-                                           = n
-                                     , element
-                                           = n
-                                           |>( String.fromInt
-                                                   >> String.padLeft 2 '0'
-                                                   >> text
-                                             )
-                                     }
-                                   )
-                           )
                       )
-                )
+
+              , secondPickerState -- for minute value
+                    = ( ScrollPicker.initMinimalState "secondScrollPicker"
+                        |> ScrollPicker.setOptions
+                           (List.range 0 59
+                             |> List.map
+                                ( \n -> ( n
+                                          |> String.fromInt -- sub id string
+                                          |> ScrollPicker.asOptionSubId
+ 
+                                        , ScrollPicker.wrapOption
+                                          { idString      -- will be updated when setOption
+                                                = ""
+                                          , index
+                                                = -1      -- will be updated also
+                                          , value
+                                                = n
+                                          , element
+                                                = n
+                                                |>( String.fromInt
+                                                        >> String.padLeft 2 '0'
+                                                        >> text
+                                                  )
+                                          }
+                                        )
+                                )
+                           )
+                       |> ScrollPicker.setScrollStopCheckTime 250
+                  -- ^ little bit more slower to compare
 
 
-        , messageMapWith = ScrollPickerMessage
-        , pickerDirection = ScrollPicker.Vertical
-        , hourValue = 5
-        , minuteValue = 32
-        }
-
-      -- v focus to initial values
-      , [ ( "firstScrollPicker", 5 )
-        , ( "secondScrollPicker" , 32) ]
-        |> List.map
-           ( \(pickerIdString, optionValue) ->
-                 Task.perform identity <|
-                     Task.succeed <| ScrollPickerMessage pickerIdString <|
-                         ScrollPicker.MoveToTargetOption <|
-                             ScrollPicker.getOptionIdString
-                                 String.fromInt
-                                 pickerIdString
-                                 optionValue
-           )
-        |> Cmd.batch
-      )
+                   )
+              , messageMapWith = ScrollPickerMessage
+              , pickerDirection = ScrollPicker.Vertical
+              , hourValue = 5
+              , minuteValue = 32
+              }
+      in ( initModel
+         -- v focus to initial values
+         , [ ( initModel.firstPickerState,  "5")
+           , ( initModel.secondPickerState, "32")
+           ]
+           |> List.map
+              ( \(pickerState, optionSubIdString) ->
+                    pickerState
+                       |> ScrollPicker.initCmdWith
+                          initModel (ScrollPicker.asOptionSubId optionSubIdString)
+              )
+           |> Cmd.batch
+         )
 
 {-| and inside your update function you can check picker Id and update approriate
 picker model.
@@ -164,8 +167,12 @@ preference.
 -}
 exampleUpdate : ExampleMsg -> ExampleModel -> ( ExampleModel, Cmd ExampleMsg )
 exampleUpdate msg model
-    = let update
-              = ScrollPicker.updateWith model
+    = let
+        theme
+            = ScrollPicker.defaultTheme
+
+        update
+            = ScrollPicker.updateWith model theme
       in
           case msg of
               ScrollPickerMessage idString pickerMsg ->
@@ -228,7 +235,7 @@ exampleView model
             = ScrollPicker.viewAsElement model theme
 
    in
-       layout [ Background.color (theme.palette.on.surface -- use same color as shade
+       layout [ Background.color (theme.palette.surface -- use same color as shade
                                       |> theme.palette.toElmUiColor)
               ] <|
            column [ centerX

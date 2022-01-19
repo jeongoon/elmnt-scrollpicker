@@ -18,7 +18,7 @@ module Elmnt.Theme
 
 # Palette
 
-@docs Palette, defaultPalette, lightPalette
+@docs Palette, defaultPalette, lightPalette, PaletteType, PaletteOnType
 
 -}
 
@@ -33,6 +33,8 @@ import Internal.ColorUtil       as ColorUtil
 type alias Palette
     = Palette.Palette
 
+{-| a suggested palette type for default theme
+-}
 type alias PaletteType
     = { primary : Color
       , secondary : Color
@@ -48,6 +50,8 @@ type alias PaletteType
           : (Color -> Element.Color)
       }
 
+{-| used in [`PaletteType`](PaletteType)
+-}
 type alias PaletteOnType
     = { primary : Color
       , secondary : Color
@@ -78,7 +82,7 @@ isDefault val
               True
           _ ->
               False
-    
+
 {-| It works similar to Maybe.withDefault
 
 Helps to set a value to some variable or field with default value if
