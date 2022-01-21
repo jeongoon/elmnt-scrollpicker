@@ -2,7 +2,9 @@ module Internal.VirtualViewport
     exposing ( SanityOk
              , SanityUnknown
              , Pos
+             , emptyPosWith
              , fromPos
+             , getViewportPosValue
              , PosRecord
              , Settings
              , toSettings
@@ -18,9 +20,10 @@ module Internal.VirtualViewport
              , fromViewportPos
              , adjustViewportPos
              , WarpInfo
+             , getMaybeWarpInfo
              , initPos
-             , updatePos
-             , toRealViewportPos
+             , updatePosAndRealViewportPos
+             , toRealViewportPosVal
              )
 
 {-| This module is used in `BaseScrollPicker` only. `BaseScrollPicker` uses
@@ -77,24 +80,33 @@ type SanityUnknown
 
 {-| data for a `VirtualViewport` value
 -}
-type Pos sanityChecked viewportSanityChecked
-    = Pos (PosRecord viewportSanityChecked)
+type Pos compatibleSanity viewportCompatibleSanity
+    = Pos (PosRecord viewportCompatibleSanity)
 
 
-{-| exported for debugging purpose
+{-| exported for debugging purpose or quick use
  -}
-fromPos : Pos sanityChecked viewportSanityChecked
-          -> PosRecord viewportSanityChecked
-fromPos (Pos pos)
-    = pos
+fromPos : Pos compatibleSanity viewportCompatibleSanity
+          -> PosRecord viewportCompatibleSanity
+fromPos (Pos posRec)
+    = posRec
+
+{-| get current viewport position in Float value
+-}
+getViewportPosValue : Pos compatibleSanity viewportCompatibleSanity
+                      -> Float
+getViewportPosValue (Pos posRec)
+    = posRec.lastViewportPos
+    |> fromViewportPos
+
 
 {-| Internal structure for `Pos`
 
 exported for debugging purpose.
  -}
-type alias PosRecord compatibleSanity
+type alias PosRecord viewportCompatibleSanity
     = { virtualPageNum     : PageNum SanityOk
-      , lastViewportPos    : ViewportPos compatibleSanity
+      , lastViewportPos    : ViewportPos viewportCompatibleSanity
       , lastClockTime      : Int
       , lastViewportOffset : Float
       , mbLastWarpInfo     : Maybe WarpInfo
@@ -159,7 +171,7 @@ toSettings { virtualPageLength,
 the size of it.
 -}
 toElementLength : Settings SanityOk ->
-                Float
+                  Float
 toElementLength (Settings { virtualPageLength, wormInMargin })
     = (virtualPageLength |> fromPageLength ) + wormInMargin * 2
     
@@ -339,11 +351,39 @@ type alias WarpInfo
                , ViewportPos SanityOk)
       }
 
+
+{-| retreive `WarpInfo` from the `Pos`
+-}
+getMaybeWarpInfo : Pos compatibleSanity viewportCompatibleSanity ->
+                   Maybe WarpInfo
+getMaybeWarpInfo (Pos posRec)
+    = posRec.mbLastWarpInfo
+
+    
 {-| must be not exported -}
 okPos : PosRecord compatibleSanity -> Pos SanityOk compatibleSanity
 okPos
     = Pos
 
+{-|
+-}
+emptyPosWith : Settings SanityOk -> Pos SanityUnknown SanityOk
+emptyPosWith (Settings { wormOutPadding })
+    = Pos
+      { virtualPageNum
+            = PageNum 0
+      , lastViewportPos
+            = (ViewportPos wormOutPadding)
+      , lastClockTime
+            = 9 * (10 ^ 15) -- large number enough to
+                            -- make real lastClockTime is out dated.
+                            -- XXX: Maybe type is better?
+      , lastViewportOffset
+            = 0
+      , mbLastWarpInfo
+            = Nothing
+      }
+      
 {-| set valid and tidy `Pos` value with `Settings`, **Real Viewport State**
 -- which the virtual viewport wants to map -- and new viewport position value
 and time
@@ -355,7 +395,7 @@ initPos : Settings SanityOk ->
           , lastSceneLength : Float
           } ->
           ( Time.Posix, ViewportPos SanityUnknown ) ->
-          Pos SanityOk SanityOk
+          Pos SanityUnknown SanityOk
 
 initPos ( (Settings { virtualPageLength }) as settings )
         ( { lastScrollClock, lastViewportPos }
@@ -466,7 +506,7 @@ setPosHelper ((Settings { virtualPageLength, wormInMargin })
 
 {-| check `Pos` value against the time and give *sanitized* value to use.
 -}
-updatePos
+updatePosAndRealViewportPos
     : Settings SanityOk ->
       { stateWith |
         lastScrollClock         : Time.Posix
@@ -476,101 +516,88 @@ updatePos
       } ->
       ( Time.Posix, ViewportPos SanityUnknown ) ->
       Pos compatibleSanity viewportCompatibleSanity ->
-      Pos SanityOk SanityOk
+      ( Pos SanityUnknown SanityOk, Float )
 
-updatePos ( (Settings {virtualPageLength}) as settings)
-          ({ lastScrollClock, scrollStopCheckTime, lastSceneLength } as state)
-          (( _, (ViewportPos newViewportPosVal) ) as newPosInfo)
-            -- note: `ViewportPos SanityUnknown` will be handled by
-            -- `setPosHelper`
-          ((Pos lastPosRec) as lastPos)
+updatePosAndRealViewportPos
+        ( (Settings {virtualPageLength}) as settings)
+        ({ lastScrollClock, scrollStopCheckTime, lastSceneLength } as state)
+        (( _, (ViewportPos newViewportPosVal) ) as newPosInfo)
+        -- note: `ViewportPos SanityUnknown` will be handled by
+        -- `setPosHelper`
+        ((Pos lastPosRec) as lastPos)
 
-    = let lastScrollClockTime
-              = state.lastScrollClock
-              |> Time.posixToMillis
+    = let
+        lastScrollClockTime
+            = state.lastScrollClock
+            |> Time.posixToMillis
 
-          lastVirtualPageNumVal
-              = lastPosRec.virtualPageNum
-              |> fromPageNum
-              |> toFloat
+        lastVirtualPageNumVal
+            = lastPosRec.virtualPageNum
+            |> fromPageNum
+            |> toFloat
               
-          absolutePos
-              = calcRealViewportPos settings lastPos
-              --|> Debug.log "absPos"
+        absolutePos
+            = calcRealViewportPos settings lastPos
                 
-          relativePos
-              = newViewportPosVal
-                - ( lastPosRec.lastViewportPos
-                      |> fromViewportPos
+        relativePos
+            = newViewportPosVal
+              - ( lastPosRec.lastViewportPos
+                    |> fromViewportPos
                   )
-              --|> Debug.log "relPos"
-      in
-          if ( lastScrollClockTime + scrollStopCheckTime )
-              < lastPosRec.lastClockTime ||
-              -- ^ obsolete already: start fresh with updated state value
-              ( absolutePos < 0 && relativePos > 0 ) ||
-              -- ^ hit the front, now go backward
-              ( absolutePos > lastSceneLength && relativePos < 0 )
-              -- ^ hit the back, now go forward
-          then
-              let state1
-                      = { state |
-                          lastViewportPos
-                              = if absolutePos < 0 then
-                                    relativePos
-                                else
-                                    lastSceneLength + relativePos
-                           
-                        }
 
-              in                          
-                  newPosInfo
-                      |> initPos settings state1
-                      -- initPos with clean position
-                      |> (\(Pos value) ->
-                              value
-                                |> okPos
-                         )
+        isObsolete
+            = lastScrollClockTime + scrollStopCheckTime
+              < lastPosRec.lastClockTime
+   in
+       let ((Pos newPosRec) as newPos)
+               = if ( isObsolete ||
+                      -- ^ start fresh with updated state value
+                     ( absolutePos < 0 && relativePos > 0 ) ||
+                     -- ^ hit the front, now go backward
+                     ( absolutePos > lastSceneLength && relativePos < 0 )
+                     -- ^ hit the back, now go forward
+                    )
+
+                 then
+                     let
+                         state1
+                             = { state |
+                                 lastViewportPos
+                                     = if absolutePos < 0 then
+                                           relativePos
+                                       else
+                                           -- isObsolete or hit the back
+                                           lastSceneLength + relativePos
+                               }
+
+                     in
+                         newPosInfo
+                             |> initPos settings state1
+
+
+                 else
+                     newPosInfo
+                         |> setPosHelper settings state
+                            { initPageNum
+                                  = lastPosRec.virtualPageNum
+                            , mbViewportOffset
+                                  = Just lastPosRec.lastViewportOffset
+                            }
+                         |> Pos
+
+       in
+           ( newPos,    newPosRec
+                           |> okPos
+                           |> toRealViewportPosVal settings state
+           )
+                     
 {-
-                      |> (\p ->
-                              Debug.log ( toRealViewportPos settings state1 p
-                                         |> String.fromFloat ) p
-                              )
+{-| make the `Pos` suitable for next `updatePos`
 -}
-
-          else
-              newPosInfo
-                  |> setPosHelper settings state
-                     { initPageNum
-                           = lastPosRec.virtualPageNum
-                     , mbViewportOffset
-                           = Just lastPosRec.lastViewportOffset
-                     }
-                  |> okPos
-
-
-{- make the `Pos` suitable for next `updatePos`
 outdatePos : Pos compatibleSanity viewportCompatibleSanity ->
-           Pos SanityUnknown SanityUnknown
+           Pos SanityUnknown viewportCompatibleSanity
 outdatePos (Pos posRec)
-    = { virtualPageNum
-            = posRec.virtualPageNum
-
-      , lastViewportPos
-            = posRec.lastViewportPos
-            |> fromViewportPos
-            |> makeViewportPos
-
-      , lastClockTime
-            = posRec.lastClockTime
-
-      , lastViewportOffset
-            = posRec.lastViewportOffset
-
-      , mbLastWarpInfo
-            = posRec.mbLastWarpInfo
-      }
-    |> Pos
+    = Pos posRec
 -}
 
 {-| calculate relative position before being bounded from `0` to `Scene Length`
@@ -601,15 +628,15 @@ calcRealViewportPos (Settings { virtualPageLength, wormInMargin })
 
 {-| the real viewport value translated from Virtual viewport `Pos`
 -}
-toRealViewportPos : Settings SanityOk ->
-                    { stateWith |
-                      lastSceneLength : Float
-                    } ->
-                    Pos SanityOk compatibleSanity ->
-                    Float
+toRealViewportPosVal
+    : Settings SanityOk ->
+      { stateWith |
+        lastSceneLength : Float
+      } ->
+      Pos SanityOk viewportCompatibleSanity ->
+      Float
 
-toRealViewportPos settings
-                  { lastSceneLength } pos
+toRealViewportPosVal settings { lastSceneLength } pos
     = calcRealViewportPos settings pos
        --|> Debug.log "orig calculated"
        |> max 0

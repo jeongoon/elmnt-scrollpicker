@@ -64,7 +64,6 @@ module Elmnt.BaseScrollPicker
                  , subscriptionsWithHelper
               )
 
-
 {-| This module is an implementation of picker by scrolling and basic view type
  is [`elm-ui`][elm-ui]. and animation can be done a bit tricky but easily thanks
  to [`elm-style-animation`][elm-style-animation].
@@ -120,7 +119,7 @@ defaultShadeAttrsWith, defaultBaseSettingsWith, Geom, getCenterPosOf,
 partitionOptionsHelper, getRelPosOfElement,
 taskGetViewport, taskSetViewportHelper,
 taskTriggerGetCenterOptionHelper,
-alwaysUpdateOptionLenghtsHelper, toMilliPixel, fromMilliPixel,
+alwaysUpdateOptionLengthsHelper, toMilliPixel, fromMilliPixel,
  subscriptionsWithHelper
 
 # FIXME
@@ -262,6 +261,19 @@ type alias Geom
       }
 
 
+{-| not exported
+-}
+rectangleToGeom : { width: Float, height : Float } ->
+                  Geom
+rectangleToGeom rect
+    = { x = 0
+      , y = 0
+      , width
+          = rect.width
+      , height
+          = rect.height
+      }
+
 {-| two dimensional value
 -}
 type alias TwoDim
@@ -334,8 +346,7 @@ type alias BasicStateLike statExtra optExtra vt msg
       --   so we need to make a pseudo `style' record
 
       , lastScrollClock         : Time.Posix
-      , lastViewportPos         : Float
-      , lastViewportLength      : Float
+      , lastSceneLength         : Float
       , virtualControlPos       : Virtual.Pos Virtual.SanityUnknown
                                               Virtual.SanityOk
       , virtualControlSettings  : Virtual.Settings Virtual.SanityOk
@@ -350,7 +361,18 @@ type alias BasicStateLike statExtra optExtra vt msg
       }
 
 
-{-| Msg chain generally covers the following steps
+{-| Msg chain generally can break into two group
+
+**Initialising viewports**
+
+```
+1. sync virtual viewport first
+2. update option elements information including the length of each option
+3. sync viewport position
+4. sync *real* viewport position and *virtual* viewport position
+```
+
+**Snapping the selected item in the middle of the frame **
 
 ```
 1. Detect any scroll which has delayed 'Cmd' to check
@@ -370,8 +392,11 @@ you could possibly search keyword 'messageMap' where I need to map the
 `Msg' into `msg'
 -}
 type Msg optExtra vt msg
-    = SyncLastScroll            Time.Posix Float Bool
+    = InitViewportsMsg          InitViewportsChain
     | OnScroll
+    | SyncVirtualControlPos     Time.Posix Float Float
+    | SyncLastScroll            Time.Posix Float Bool
+-- ^ sync and initialising
     | OnKey                     String
     | FindCenterOptionWith      Float
                                 -- ^ the center position of the control frame
@@ -387,14 +412,19 @@ type Msg optExtra vt msg
     | SetSnapToTargetOption     String Float Float Float
                                 --^ id, _  , start, rel pos
     | GotoTargetOption          String
-    | UpdateOptionLengths       (Maybe Int)
-    | SyncOptionLenghts         (List (String, Float))
     | ScrollPickerSuccess       (BasicOptionLike optExtra vt msg)
     | ScrollPickerFailure       String String Error
     | Animate                   Animation.Msg
-    | PreSetViewport            SelectedViewport MilliPixel
     | SetViewport               SelectedViewport MilliPixel
     | NoOp
+
+
+{-| Sub Msg for initializing process.
+-}
+type InitViewportsChain
+    = UpdateOptionLengths       (Maybe Int)
+    | SyncOptionLengths         (List (String, Float))
+    | SyncViewportForView       Float Float
 
 
 {-| this picker need to load each option lengths to make control viewport
@@ -538,6 +568,8 @@ type WhichViewport
     = ForControl
     | ForView
 
+{- FIXME: I think this is not needed anymore
+-}
 type SelectedViewport
     = SelectViewport WhichViewport
     | SelectBothViewport
@@ -654,10 +686,19 @@ type alias BaseSettings cssCompat msg
 
 
 {-| not exported
+
+when make Float -> Int pixel value, `trucate` is normally working good
+ enough for FF, Chrome, Webkit.
+ -}
+cut_ : Float -> Int
+cut_ 
+    = truncate
+
+{-| not exported
 -}
 defaultPaddingLengthFrom : Int -> Int
 defaultPaddingLengthFrom shadeLength
-    = (shadeLength |> toFloat) * 1.5 |> round
+    = (shadeLength |> toFloat) * 1.5 |> cut_
 
 
 {-| not exported
@@ -724,7 +765,7 @@ defaultBaseSettingsWith theme pickerDirection
             = theme.pickerLength
             |> Theme.withDefault
                ( (shadeLength |> toFloat) * 3.5
-                   |> truncate)
+                   |> cut_ )
 
    in
        ( case pickerDirection of
@@ -1112,6 +1153,7 @@ isPickerControlReady state
               = state.optionIds
               |> List.length
     in
+        state.optionLengthInfoStatus == OptionLengthUpdated &&
         numOfOptions > 0 &&
         numOfOptions == ( state.optionLengths |> List.length )
 
@@ -1131,7 +1173,7 @@ resetPickerControl state
 [`Browser.Dom.Element`](/packages/elm/browser/latest/Browser-Dom#Element)
 share basic record accessor like `.x`  `.y`  `.width`  `.height`
 
-getCenterPosOfHelper function try to get center poisition of the some field.
+getCenterPosAndLengthHelper function try to get center poisition of the some field.
 
 ex) to get center 'y' position of viewport, you can try
 
@@ -1166,7 +1208,7 @@ getCenterPosAndLengthOfHelper posAccessor lengthAccessor geomAccessor record
             |> lengthAccessor
 
    in
-       ( geomPos + geomLength / 2 -- center longitudinal position
+       ( geomPos + 0.5 * geomLength  -- center longitudinal position
        , geomLength )
 
 
@@ -1354,7 +1396,7 @@ contains upto milli of base unit (pixel in this case)
 toMilliPixel : Float -> MilliPixel
 toMilliPixel floatVal
     = floatVal * 1000
-    |> truncate
+    |> truncate -- not cut_
     |> MilliPixel
 
 {-| An utility which converts an integer value(which contains up to thousandth
@@ -1401,46 +1443,55 @@ initBasicState idString
         virtualControlSettings
             = Virtual.toSettings
               { virtualPageLength
-                    = Virtual.makePageLength 
-              
-      { idString
-            = idString
-      , optionIds
-            = []
-      , optionLengths
-            = []
-      , optionIdToItemDict
-            = Dict.empty
-      , targetIdString
-            = Nothing
-      , pseudoAnimState
-            = initPseudoAnimState 0
-                -- ^ this is not actual Html Style elements
-                --   just for storing some animation status
-                --   `pos' is used for `Browser.Dom.setViewportOf'
-      , lastScrollClock
-            = Time.millisToPosix 0
-      , lastViewportPos
-            = -1
-      , virtualControlPos
-            = Virtual.initPos
-      , scrollTraceMP
-            = Set.empty
-      , finalTargetScrollPosMP
-            = MilliPixel -1
-      , scrollStopCheckTime
-            = 75 -- 75 ms
-      , optionIdInTheCenter
-            = Nothing
-      , frameCenterPos
-            = -1
-      , optionCenterRelPos
-            = -1
-      , optionLengthInfoStatus
-            = OptionLengthUnknown
-      , testingValue
-            = "init"
-      }
+                    = Virtual.makePageLength 9000
+              , wormOutPadding
+                    = 1000
+              , wormInMargin
+                    = 800
+              }
+
+   in
+       { idString
+             = idString
+       , optionIds
+             = []
+       , optionLengths
+             = []
+       , optionIdToItemDict
+             = Dict.empty
+       , targetIdString
+             = Nothing
+       , pseudoAnimState
+             = initPseudoAnimState 0
+             --   this is not actual Html Style elements
+             --   just for storing some animation status
+             --   `pos' is used for `Browser.Dom.setViewportOf'
+       , lastScrollClock
+             = Time.millisToPosix 0
+       , lastSceneLength
+             = -1
+       , virtualControlPos
+             = Virtual.emptyPosWith
+               virtualControlSettings
+       , virtualControlSettings
+             = virtualControlSettings
+       , scrollTraceMP
+             = Set.empty
+       , finalTargetScrollPosMP
+             = MilliPixel -1
+       , scrollStopCheckTime
+             = 75 -- 75 ms
+       , optionIdInTheCenter
+             = Nothing
+       , frameCenterPos
+             = -1
+       , optionCenterRelPos
+             = -1
+       , optionLengthInfoStatus
+             = OptionLengthUnknown
+       , testingValue
+             = "init"
+       }
 
 {-| this function shows a way to init your `BasicStateLike` model
 `initBasicState` value.
@@ -1468,7 +1519,9 @@ resetInitBasicState idString state
           , targetIdString          = basicSt.targetIdString
           , pseudoAnimState         = basicSt.pseudoAnimState
           , lastScrollClock         = basicSt.lastScrollClock
-          , lastViewportPos         = basicSt.lastViewportPos
+          , lastSceneLength         = basicSt.lastSceneLength
+          , virtualControlPos       = basicSt.virtualControlPos
+          , virtualControlSettings  = basicSt.virtualControlSettings
           , scrollTraceMP           = basicSt.scrollTraceMP
           , finalTargetScrollPosMP  = basicSt.finalTargetScrollPosMP
           , scrollStopCheckTime     = basicSt.scrollStopCheckTime
@@ -1516,9 +1569,10 @@ initCmdWith ({ messageMapWith } as appModel) optionSubId state
              (getOptionIdString state.idString optionSubId)
              Nothing -- Maybe (error -> msg)
 
-      , UpdateOptionLengths Nothing
+      , InitViewportsMsg (UpdateOptionLengths Nothing)
           |> messageMapWith state.idString
           |> Task.succeed
+
       ]
     |> List.map
        (Task.perform identity)
@@ -1716,16 +1770,16 @@ viewAsElementHelper { messageMapWith, pickerDirection }
                                 -}
                                     let
                                         len
-                                            = ( paddingLength |> toFloat ) * 2
-                                              + ( state.optionLengths
-                                                |> List.sum
-                                                )
-                                            |> truncate
+                                            = state.virtualControlSettings
+                                            |> Virtual.toElementLength
+                                            |> cut_
                                     in
                                         [ el [ fill |> widthSetter
                                              , fill |> minimum len |> lengthSetter
                                              ] <| el [ fill |> widthSetter
                                                      , fill |> minimum len |> lengthSetter
+                                                     , padding 0
+                                                     -- ^ required to ensure minimum length
                                                      ] <| text "controller"
                                         ]
 
@@ -1838,6 +1892,29 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                         >> Task.succeed
                    )
 
+        taskGetViewportPosAndCenterPos whichViewport
+            = let
+                idAccessor
+                    = case whichViewport of
+                          ForView ->
+                              .idString
+                          ForControl ->
+                              getControlIdString
+           in
+               state
+                 |> idAccessor
+                 |> taskGetViewport
+                 |> Task.andThen
+                    (\vp ->
+                         ( vp.viewport
+                            |> posAccessor
+                         , vp
+                            |> getCenterPosAndLengthOf .viewport
+                            |> Tuple.first
+                         )
+                         |> Task.succeed
+                    )
+
         taskGetControlViewportPos
             = state
                 |> getControlIdString
@@ -1845,32 +1922,20 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                 |> Task.map
                    (.viewport >> posAccessor)
 
-        taskGetControlViewportPosAndCenterPos
-            = state
-                |> getControlIdString
+
+        taskGetViewViewportPosAndSceneLength
+            = state.idString
                 |> taskGetViewport
-                |> Task.andThen
+                |> Task.map
                    (\vp ->
                         ( vp.viewport
-                           |> posAccessor
-                        , vp
-                           |> getCenterPosAndLengthOf .viewport
-                           |> Tuple.first
+                              |> posAccessor
+                        , vp.scene
+                              |> rectangleToGeom
+                              |> lengthAccessor
                         )
-                        |> Task.succeed
                    )
 
-{-
-        taskGetControlViewportCenterPos
-            = state
-                |> getControlIdString
-                |> taskGetViewport
-                |> Task.andThen
-                   (getCenterPosAndLengthOf .viewport
-                        >> Tuple.first
-                        >> Task.succeed
-                   )
--}
         taskGetOptionCenterPos idstr
             = idstr
             |> taskGetElement
@@ -1881,7 +1946,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                )
 
         isInScrollTraceHelper (MilliPixel mpInt)
-            = {-(Debug.log "scroll trace:"-} state.scrollTraceMP{-)-}
+            = state.scrollTraceMP 
             |> Set.toList
             |> List.map
                -- ^ make distance list
@@ -1897,98 +1962,324 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                -- ^ and find any distance is equal to zero.
 
         cleanScrollPos
-            = truncate
+            = cut_
               >> toFloat
 
+        pseudoState realViewportPos -- state for `Virtual.*`
+            = { lastScrollClock
+                    = state.lastScrollClock
+              , lastViewportPos
+                    = realViewportPos
+              , lastSceneLength
+                    = state.lastSceneLength
+              , scrollStopCheckTime
+                    = state.scrollStopCheckTime
+              }
 
    in
        case msg of
-           OnScroll ->
-               ( { state |
-                   testingValue
-                       = let _ =  Debug.log "In OnScroll" state.testingValue
-                         in "next OnScroll"
-                 }
+ 
+           InitViewportsMsg (UpdateOptionLengths mbMaxTryCount) ->
+               -- if `initCmdWith` in use, this Msg will fire automatically
+               let maxTryCount
+                       = mbMaxTryCount
+                       |> Maybe.withDefault updateOptionLengthMaxTry
+               in
+                   ( { state |
+                       optionLengthInfoStatus
+                           = OptionLengthReading -- synced well ??
+                     }
 
-               , let taskSyncLastScroll
-                         = Task.map2
-                           (\now vpPos ->
-                                SyncLastScroll now vpPos
-                                ( (state |> isSnapping)
-                                ) --> when keepAnimation? and don't bother
-                                  --  to perform `SetViewport`
-                           )
-                           Time.now
-                           taskGetControlViewportPos
-                         |> Task.onError
-                            (always <| Task.succeed NoOp)
+                   , if maxTryCount < 1 then
+                         Task.perform messageMap <|
+                         Task.succeed <|
+                         ScrollPickerFailure
+                         ( state.idString ++ ":>"
+                               ++ "UpdateOptionLengths" )
+                         "had reached max number of attempts"
+                         ( GetOptionLengthFailure Nothing )
 
-                 in
-                     ( case state.optionLengthInfoStatus of
-                           OptionLengthUnknown ->
-                               [ UpdateOptionLengths Nothing
-                                   |> Task.succeed
-                               , taskSyncLastScroll
-                               ]
-                               |> List.map
-                                  (Task.perform messageMap)
-                               |> Cmd.batch
+                     else
+                         state.optionIds
+                           |> List.map
+                              ( \optIdStr ->
+                                    taskGetElement optIdStr
+                                      |> Task.andThen
+                                         ( \domEelement ->
+                                               let
+                                                   optLen
+                                                       = domEelement.element
+                                                       |> lengthAccessor
+                                               in
+                                                   ( optIdStr, optLen )
+                                                    |> Task.succeed
+                                         )
+                              ) --> List (Task Error Float)
+                           |> Task.sequence
+                           |> Task.attempt
+                              (\res ->
+                                   messageMap <|
+                                   case res of
+                                       Ok  optIdToLengthPairs ->
+                                           optIdToLengthPairs
+                                             |> SyncOptionLengths
+                                             |> InitViewportsMsg
 
-                           _ ->
-                               taskSyncLastScroll
-                                 |> Task.perform messageMap
-                     )
+                                       Err _ ->
+                                           maxTryCount - 1
+                                             |> Just
+                                             |> UpdateOptionLengths
+                                             |> InitViewportsMsg
+                              )
+                   )
+
+           InitViewportsMsg (SyncOptionLengths optionToLengthPairs) ->
+                -- Important!
+               -- update all the option lengths in the record
+               -- and will update scene and viewport of `ForView` viewport
+               -- and will update virtual viewport in turn
+               --     if you follow the Cmd channel
+
+               ( ( optionToLengthPairs
+                     |> List.foldr
+                        (\(optId, optLength) mbFoldedState ->
+                             Maybe.map2
+                             (\(OptionItem opt) foldedState ->
+                                  foldedState
+                                     |> replaceOption
+                                        (wrapOption
+                                             { opt |
+                                               surfaceLength
+                                                   = (Just optLength)
+                                             }
+                                        )
+                             )
+                             ( state.optionIdToItemDict
+                                  |> Dict.get optId
+                             )
+                             mbFoldedState
+                        )
+                        (Just state)
+                 )
+                 |> (\mbStat ->
+                         case mbStat of
+                             Just state1 ->
+                                 { state1 |
+                                   optionLengthInfoStatus
+                                       = OptionLengthUpdated
+                                 , optionLengths
+                                       = state1
+                                       |> getOptions
+                                       |> List.map .surfaceLength
+                                       |> List.filterMap identity
+                                 }
+                             Nothing ->
+                                 state
+                                   |> resetPickerControl
+
+                    )
+
+               , ( Task.map
+                       (InitViewportsMsg <<
+                            Util.uncurry SyncViewportForView
+                       )
+                       taskGetViewViewportPosAndSceneLength
+
+                   |> Task.onError
+                      (always <| Task.succeed NoOp)
+                   |> Task.perform messageMap
+                 )
                )
 
+           InitViewportsMsg (SyncViewportForView
+                                   realViewportPos sceneLength) ->
+               let state1
+                       = { state |
+                           lastSceneLength
+                               = sceneLength
+                         }
+               in
+                   ( state1
+                     -- this involves virtual viewport change as well
+                   , Task.map3
+                         SyncVirtualControlPos
+                         Time.now
+                         (Task.succeed realViewportPos)
+                         taskGetControlViewportPos
+
+                   |> Task.onError
+                         (always <| Task.succeed NoOp)
+                      |> Task.perform messageMap
+                   )
+
+ 
+           OnScroll ->
+               -- note: this Msg only getting from the `ForControl`
+               --       not `'ForView`
+               ( state
+
+               , ( case state.optionLengthInfoStatus of
+                       OptionLengthUpdated ->
+                           Task.map3
+                               SyncVirtualControlPos
+                               Time.now
+                               ( state.idString
+                                    |> taskGetViewport
+                                    |> Task.map
+                                       ( .viewport >> posAccessor )
+                               )
+                               taskGetControlViewportPos
+                           |> Task.onError
+                                   (always <| Task.succeed NoOp)
+
+                       _ ->
+                           -- equivalent to initial state
+                           InitViewportsMsg (UpdateOptionLengths Nothing)
+                                |> Task.succeed
+
+
+                 )
+                 |> Task.perform messageMap
+               )
 
            OnKey keyCodeString -> -- not used yet.
                let _ = Debug.log "key code:"
                in
                    ( state, Cmd.none )
 
-           SyncLastScroll clock viewportPos keepAnimation ->
-               let state1
+           SyncVirtualControlPos clock
+                                 lastRealViewportPosVal
+                                 newControlViewportPosVal ->
+               {- changes:
+                  state: update `state.virtualControlPos` with
+                         current virtual viewport position.
+                         which involves syncing the state.virtualControlPos 
+                         with real viewport position.
+
+                  cmd:1. if virtual viewport position required to move,
+                         `setViewport` as well. (optional)
+                      2. send new Msg to sync new real viewport position
+
+                  Virtual "Viewport" Pos ->
+                  "Virtual Control Pos" -> (this is a helper data)
+                  "Real"Viewport Pos ->
+                -}
+
+               case state.virtualControlPos
+                       |> Virtual.getMaybeWarpInfo
+                       |> Debug.log "warpInfo"
+               of
+                   Just _ ->
+                       -- previously module-generated scroll
+                       -- just update state.virtualControlPos
+                       ( { state |
+                           virtualControlPos
+                               = ( clock, newControlViewportPosVal
+                                             |> Virtual.makeViewportPos
+                                 )
+                               |> Virtual.initPos
+                                  state.virtualControlSettings
+                                  (pseudoState lastRealViewportPosVal)
+                         }
+                       , Cmd.none
+                       )                       
+                   _ ->
+                       let
+                           ( newVirtualControlPos, newRealViewportPos )
+                               = state.virtualControlPos
+                               |> Debug.log "origVirtualControlPos"
+                               |> Virtual.updatePosAndRealViewportPos
+                                  state.virtualControlSettings
+                                  (pseudoState lastRealViewportPosVal
+                                    |> Debug.log "withPseudoState")
+                                  (clock
+                                  , newControlViewportPosVal
+                                      |> Virtual.makeViewportPos
+                                  )
+ 
+                           taskSyncLastScroll
+                               = Time.now
+                               |> Task.map
+                                  (\now ->
+                                       SyncLastScroll now
+                                       newRealViewportPos
+                                       ( ( state
+                                             |> (not <<isPickerControlReady) )
+                                         && ( state |> isSnapping )
+                                       ) -- keepAnimation?
+                                  )
+                               |> Task.onError
+                                  (always <| Task.succeed NoOp)
+
+                       in
+                           ( { state |
+                               virtualControlPos
+                                   = newVirtualControlPos
+                                   |> Debug.log "newVirtualControlPos"
+                             }
+                           , ( taskSyncLastScroll ::
+                                   case newVirtualControlPos
+                                           |> Virtual.getMaybeWarpInfo
+                                   of
+                                       Just warpInfo ->
+                                           SetViewport
+                                           (SelectViewport ForControl)
+                                           ( warpInfo.to
+                                                |> Tuple.second
+                                                |> Virtual.fromViewportPos
+                                                |> toMilliPixel
+                                           )
+                                           |> Task.succeed
+                                           |> List.singleton
+                                       Nothing ->
+                                           []
+                             )
+                             |> List.map
+                                (Task.perform messageMap)
+                             |> Cmd.batch
+                           )
+
+           SyncLastScroll clock destRealViewportPosVal keepAnimation ->
+               -- sync from `ForControl` -> `ForView`
+               -- if the `page` of control viewport needed to be changed,
+               -- so be it.
+
+               let
+                    state1
                        = { state |
                            lastScrollClock
                                = clock
-                         , lastViewportPos
-                               = viewportPos
                          }
+
                in
-                   ( if keepAnimation then
-                         ( state1, Cmd.none )
-                     -- they are already in there in harmony.
-                     -- sync value in the state only.
+                   if keepAnimation then
+                       ( state1, Cmd.none )
+                       -- don't bother to sync both viewports
+                       -- during animation.
+                       -- this happens only virtual viewport is not ready.
+                   else
+                       ( state1
+                           |> stopSnapping
+                           -- note: this is not immediate change
+                           --       but it will after some time.
+                           --       I guess that there is some issue with
+                           --       accurate syncing
 
-                     else
-                         ( state1
-                             |> stopSnapping
+                       -- v .. and check the scrolling is stopped after
+                       --      few milli seconds to try another snapping
+                       , [ (Process.sleep << toFloat) state.scrollStopCheckTime
+                              |> Task.andThen
+                                 (always Time.now)
+                              |> Task.perform (messageMap << TriggerSnapping)
 
-                         -- v .. and check the scrolling is stopped after
-                         --      few milli seconds to try another snapping
-                         , (Process.sleep << toFloat) state.scrollStopCheckTime
-                           |> Task.andThen
-                              (always Time.now)
-                           |> Task.perform (messageMap << TriggerSnapping)
-                         )
-                   )
-                   |> (if state |> isPickerControlReady then
-                           -- sync the viewport of option view
-                           -- with the one of control
-                           Tuple.mapSecond
-                           (\origCmd ->
-                                Cmd.batch
-                                [ origCmd
-                                , Task.perform messageMap <|
-                                  Task.succeed <|
-                                  (SetViewport <| SelectViewport ForView)
-                                  (viewportPos |> toMilliPixel)
-                                ]
-                           )
-
-                       else
-                           identity
-                      )
+                         , (SetViewport <| SelectViewport ForView)
+                               (destRealViewportPosVal
+                                    |> toMilliPixel)
+                            |> Task.succeed
+                            |> Task.perform messageMap
+                         ]
+                         |> Cmd.batch
+                       )
 
            TriggerSnapping now ->
                if (state |> (not << isSnapping)) &&
@@ -1999,60 +2290,36 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                then
                    -- scroll has been stopped within `scrollStopCheckTime'
                    -- : start to snap to approriate option
-
-{- -- below cose is not working as I epxected
-   -- because information from `SyncCenterOption` is probably outdated
-   -- so just get fresh value to get snapping point.
-
-                   if state |> hasCenterOption then
-                       ( state
-                       , Task.perform identity <|
-                         Task.succeed <|
-                         messageMap <|
-                         case state.optionIdInTheCenter of
-
-                                 SetSnapToTargetOption
-                                     optionId
-                                     state.frameCenterPos
-                                     state.optionCenterRelPos
-                             _ ->
-                                 ScrollPickerFailure "TriggerSnapping"
-                                     "center option supposed to be available but not."
-                                     CenterOptionUnavailable
+                   ( state
+                   , ( Task.map2
+                       (\(frameCenterPos, _)
+                            ( frameVpStartPos, frameVpCenterPos ) ->
+                            FindCenterOptionWith
+                            frameCenterPos
+                            frameVpStartPos
+                            frameVpCenterPos
+                            SetSnapToTargetOption
                        )
-                   else
--}
-                       ( state
-                       -- or let's find out now and snap again
-                       , ( Task.map2
-                           (\(frameCenterPos, _)
-                                ( frameVpStartPos, frameVpCenterPos ) ->
+                       taskGetControlCenterPosAndLength
+                       (taskGetViewportPosAndCenterPos ForView)
+                       -- ^ note: getting from `ForView` viewport
+                     )
+                     |> Task.attempt
+                          (\res ->
+                               messageMap <|
+                               case res of
+                                   Ok moduleMsg ->
+                                       moduleMsg
 
-                                FindCenterOptionWith
-                                frameCenterPos
-                                frameVpStartPos
-                                frameVpCenterPos
-                                SetSnapToTargetOption
-                           )
-                           taskGetControlCenterPosAndLength
-                           taskGetControlViewportPosAndCenterPos
-                         )
-                         |> Task.attempt
-                              (\res ->
-                                   messageMap <|
-                                   case res of
-                                       Ok moduleMsg ->
-                                           moduleMsg
-
-                                       Err detailError ->
-                                           ScrollPickerFailure
-                                           "TriggerSnapping failed"
-                                           ( "due to failure of getting dom"
-                                             ++ "element of the frame"
-                                           )
-                                           detailError
-                              )
-                         )
+                                   Err detailError ->
+                                       ScrollPickerFailure
+                                       "TriggerSnapping failed"
+                                       ( "due to failure of getting dom"
+                                         ++ "element of the frame"
+                                       )
+                                       detailError
+                          )
+                     )
                else
                    -- still animating or picker control is not ready
                    -- or another scroll happened within throttle timing.
@@ -2192,20 +2459,17 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
            GotoTargetOption optionIdString ->
                ( state
                , ( Task.map3
-                   (\( frameCenterPos, _ ) ( _, frameVpCenterPos )
-                        optionCenterPos ->
-
-                        SetSnapToTargetOption
-                        optionIdString
-                        frameCenterPos
-                        frameVpCenterPos
-                        optionCenterPos
-
-                   )
-                   taskGetControlCenterPosAndLength
-                   taskGetControlViewportPosAndCenterPos
-                   (taskGetOptionCenterPos optionIdString)
-                 )
+                       (\( frameCenterPos, _ ) frameVpPos
+                            optionCenterPos ->
+                            SetSnapToTargetOption
+                            optionIdString
+                            frameCenterPos -- not used but...
+                            frameVpPos
+                            (optionCenterPos - frameCenterPos)
+                       )
+                       taskGetControlCenterPosAndLength
+                       taskGetControlViewportPos
+                       (taskGetOptionCenterPos optionIdString)
                  |> Task.attempt
                     (\res ->
                          messageMap <|
@@ -2219,99 +2483,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                                  "could not go to the option"
                                  detailError
                     )
-                )
-
-           UpdateOptionLengths mbMaxTryCount ->
-               let maxTryCount
-                       = mbMaxTryCount
-                       |> Maybe.withDefault updateOptionLengthMaxTry
-               in
-                   ( { state |
-                       optionLengthInfoStatus
-                           = OptionLengthReading -- synced well ??
-                     }
-
-                   , if maxTryCount < 1 then
-                         Task.perform messageMap <|
-                         Task.succeed <|
-                         ScrollPickerFailure
-                         ( state.idString ++ ":>"
-                               ++ "UpdateOptionLengths" )
-                         "had reached max number of attempts"
-                         ( GetOptionLengthFailure Nothing )
-
-                     else
-                         state.optionIds
-                           |> List.map
-                              ( \optIdStr ->
-                                    taskGetElement optIdStr
-                                      |> Task.andThen
-                                         ( \domEelement ->
-                                               let
-                                                   optLen
-                                                       = domEelement.element
-                                                       |> lengthAccessor
-                                               in
-                                                   ( optIdStr, optLen )
-                                                    |> Task.succeed
-                                         )
-                              ) --> List (Task Error Float)
-                           |> Task.sequence
-                           |> Task.attempt
-                              (\res ->
-                                   messageMap <|
-                                   case res of
-                                       Ok  optIdToLengthPairs ->
-                                           SyncOptionLenghts
-                                           optIdToLengthPairs
-
-                                       Err _ ->
-                                           UpdateOptionLengths
-                                           (Just <| maxTryCount - 1)
-
-                              )
-                   )
-
-           SyncOptionLenghts optionToLengthPairs ->
-               ( ( optionToLengthPairs
-                     |> List.foldr
-                        (\(optId, optLength) mbFoldedState ->
-                             Maybe.map2
-                             (\(OptionItem opt) foldedState ->
-                                  foldedState
-                                     |> replaceOption
-                                        (wrapOption
-                                             { opt |
-                                               surfaceLength
-                                                   = (Just optLength)
-                                             }
-                                        )
-                             )
-                             ( state.optionIdToItemDict
-                                  |> Dict.get optId
-                             )
-                             mbFoldedState
-                        )
-                        (Just state)
-                  )
-                  |> (\mbStat ->
-                          case mbStat of
-                              Just state1 ->
-                                  { state1 |
-                                    optionLengthInfoStatus
-                                        = OptionLengthUpdated
-                                  , optionLengths
-                                        = state1
-                                        |> getOptions
-                                        |> List.map .surfaceLength
-                                        |> List.filterMap identity
-                                  }
-                              Nothing ->
-                                  state
-                                    |> resetPickerControl
-
-                     )
-               , Cmd.none
+                 )
                )
 
            ScrollPickerSuccess option ->
@@ -2373,7 +2545,6 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                                      -- So we will follow the trace of Animation
                                      -- position to check any 'scroll' events
                                      -- made from the this module in the end.
-                                 , testingValue = "before PreSetViewport"
                                  }
 
                                , Cmd.batch
@@ -2408,7 +2579,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                                                      state.targetIdString
                                      else
                                          Task.succeed <|
-                                             PreSetViewport (SelectViewport ForControl)
+                                             SetViewport (SelectViewport ForView)
                                              newViewportPosMP
                                     )
                                    |> Task.attempt
@@ -2431,20 +2602,9 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                            )
 
 
-           PreSetViewport selectviewport scrollPosMP ->
-               let _ = Debug.log "In PreSetVieport" state.testingValue
-               in
-                   ( { state |
-                       testingValue = "next PreSetViewport"
-                     }
-                   , SetViewport selectviewport scrollPosMP
-                       |> Task.succeed
-                       |> Task.perform messageMap
-                   )
            -- the Msg where acutally move the viewport
            SetViewport selectedViewport scrollPosMP ->
-               let _ = Debug.log "In SetViewport" state.testingValue
-
+               let
                    taskSetViewport whichTarget
                        = state
                        |> taskSetViewportHelper appModel
@@ -2460,9 +2620,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
 
                                  [ whichFor ]
                in
-                   ( { state |
-                       testingValue = "next SetViewport"
-                     }                           
+                   ( state
                    , targetList
                        |> List.map taskSetViewport
                        |> Task.sequence
