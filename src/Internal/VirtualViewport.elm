@@ -142,39 +142,39 @@ toSettings { virtualPageLength,
         pageLengthValue
             = virtualPageLength |> fromPageLength
 
-        acceptedWormInPadding
+        acceptedWormOutPadding
             = wormOutPadding
             |> min 150
 
         acceptedWormInMargin
             = wormInMargin
             |> min 100
-            |> min acceptedWormInPadding
+            |> min acceptedWormOutPadding
 
-        acceptedPageLength
+        acceptedPageLengthVal
             = pageLengthValue
             |> max ( 3 * wormOutPadding )
-            |> okPageLength
 
    in
-       Settings <|
-           { virtualPageLength
-                 = acceptedPageLength
-           , wormOutPadding
-                 = acceptedWormInPadding
-           , wormInMargin
-                 = acceptedWormInMargin
-           }
+       { virtualPageLength
+             = acceptedPageLengthVal
+             |> okPageLength
+       , wormOutPadding
+             = acceptedWormOutPadding
+       , wormInMargin
+             = acceptedWormInMargin
+       }
+       |> \b -> Settings b
 
 
 {-| To create *actual* viewport element, this function will give
-the size of it.
+the size of it. (note: in Float value)
 -}
 toElementLength : Settings SanityOk ->
                   Float
 toElementLength (Settings { virtualPageLength, wormInMargin })
     = (virtualPageLength |> fromPageLength ) + wormInMargin * 2
-    
+
 
 {-| a Float type of length of `VirtualViewport` page
 normally `VirtualViewport` is smaller than the real viewport is,
@@ -283,7 +283,8 @@ fromViewportPos (ViewportPos value)
 
 {-| must not be exported
 -}
-boundedViewportPosVal : Settings SanityOk -> Float -> Float
+boundedViewportPosVal : Settings SanityOk ->
+                        Float -> Float
 boundedViewportPosVal settings posVal
     = posVal
     |> max 0
@@ -295,42 +296,57 @@ the relative page number and recalculated viewport position
 together.
 -}
 adjustViewportPos
-    : Settings SanityOk -> ViewportPos SanityUnknown ->
+    : Settings SanityOk ->
+      { stateWith |
+        lastViewportLength : Float
+      } ->
+      ViewportPos SanityUnknown ->
       ( Int, ViewportPos SanityOk )
+
 adjustViewportPos ((Settings { virtualPageLength,
                                wormInMargin, wormOutPadding })
                        as settings)
-                    (ViewportPos vposValOrig)
-    = let vposVal
+                  ({ lastViewportLength } as state)
+                  (ViewportPos vposValOrig)
+    = let vposValLower
               = vposValOrig
               |> boundedViewportPosVal settings
+
+          vposValHigher
+              = vposValLower
+                + lastViewportLength
 
           pageLength
               = virtualPageLength |> fromPageLength
 
-          lowerWormInMarginAbs
-              = wormInMargin + pageLength
+          elementLength
+              = settings
+              |> toElementLength
+
+          higherWormInMarginAbs
+              = wormInMargin + pageLength -- please see picture on top
 
           ( adjustPageAmount, vposVal1 )
-              = if vposVal < wormInMargin then
+              = if vposValLower <= wormInMargin then
                     {- vposVal1 = pageLength + wormInMargin
                                  - (wormInMargin - vposVal)
                        therefore ...
                     -}
                     ( -1 -- go previous page
-                    , vposVal + pageLength
+                    , vposValLower + pageLength
+                        - lastViewportLength -- XXX : give enough padding
                     )
                 else
-                    if vposVal > lowerWormInMarginAbs then
+                    if vposValHigher >= higherWormInMarginAbs then
                         {- vposVal1 = wormInMargin + wormOutPadding
-                                   + (vposVal - lowerWormInMarginAbs))
+                                   + (vposVal - higherWormInMarginAbs))
                            therefore ...
                         -}
                         ( 1
-                        , vposVal + wormOutPadding - pageLength
+                        , vposValLower + wormOutPadding - pageLength
                         )
                     else
-                        ( 0, vposVal )
+                        ( 0, vposValLower )
       in
           ( adjustPageAmount
           , vposVal1
@@ -359,7 +375,7 @@ getMaybeWarpInfo : Pos compatibleSanity viewportCompatibleSanity ->
 getMaybeWarpInfo (Pos posRec)
     = posRec.mbLastWarpInfo
 
-    
+
 {-| must be not exported -}
 okPos : PosRecord compatibleSanity -> Pos SanityOk compatibleSanity
 okPos
@@ -389,8 +405,9 @@ and time
 initPos : Settings SanityOk ->
           { stateWith |
             lastScrollClock : Time.Posix
-          , lastViewportPos : Float
-          , lastSceneLength : Float
+          , lastViewportPos    : Float
+          , lastViewportLength : Float
+          , lastSceneLength    : Float
           } ->
           ( Time.Posix, ViewportPos SanityUnknown ) ->
           Pos SanityUnknown SanityOk
@@ -421,8 +438,9 @@ internal help function
 -}
 setPosHelper : Settings SanityOk ->
                { stateWith |
-                 lastViewportPos : Float
-               , lastSceneLength : Float
+                 lastViewportPos    : Float
+               , lastViewportLength : Float
+               , lastSceneLength    : Float
                } ->
                { initPageNum : PageNum SanityOk
                , mbViewportOffset : Maybe Float
@@ -433,7 +451,9 @@ setPosHelper : Settings SanityOk ->
 setPosHelper ((Settings { virtualPageLength, wormInMargin })
                   as settings
              )
-             { lastViewportPos, lastSceneLength }
+             ({ lastViewportPos, lastSceneLength }
+                  as state
+             )
              { initPageNum, mbViewportOffset }
              ( recordTimePosix, newViewportPos )
 
@@ -442,7 +462,7 @@ setPosHelper ((Settings { virtualPageLength, wormInMargin })
 
           ( adjustPageNumVal, syncedViewportPos )
               = newViewportPos
-              |> adjustViewportPos settings
+              |> adjustViewportPos settings state
 
           adjustedPageNum
               = initPageNumVal + adjustPageNumVal
@@ -509,6 +529,7 @@ updatePosAndRealViewportPos
       { stateWith |
         lastScrollClock         : Time.Posix
       , lastViewportPos         : Float
+      , lastViewportLength      : Float
       , lastSceneLength         : Float
       , scrollStopCheckTime     : Int
       } ->
@@ -566,7 +587,7 @@ updatePosAndRealViewportPos
                                        --    + newViewportPos
                                        -- therefore:
                                        lastPosRec.lastViewportOffset
-                                       - relativePos
+                                           - relativePos
                                  )
                              else
                                  -- stop hitting the front (decreasing in position)
@@ -585,7 +606,7 @@ updatePosAndRealViewportPos
                                      ( state
                                      , Just <|
                                            lastPosRec.lastViewportOffset
-                                           - relativePos
+                                               - relativePos
                                      )
 
                                  else
