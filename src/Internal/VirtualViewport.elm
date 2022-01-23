@@ -375,15 +375,13 @@ emptyPosWith (Settings { wormOutPadding })
       , lastViewportPos
             = (ViewportPos wormOutPadding)
       , lastClockTime
-            = 9 * (10 ^ 15) -- large number enough to
-                            -- make real lastClockTime is out dated.
-                            -- XXX: Maybe type is better?
+            = 0
       , lastViewportOffset
             = 0
       , mbLastWarpInfo
             = Nothing
       }
-      
+
 {-| set valid and tidy `Pos` value with `Settings`, **Real Viewport State**
 -- which the virtual viewport wants to map -- and new viewport position value
 and time
@@ -521,24 +519,24 @@ updatePosAndRealViewportPos
 updatePosAndRealViewportPos
         ( (Settings {virtualPageLength}) as settings)
         ({ lastScrollClock, scrollStopCheckTime, lastSceneLength } as state)
-        (( _, (ViewportPos newViewportPosVal) ) as newPosInfo)
+        (( newScrollClock, (ViewportPos newViewportPosVal) ) as newPosInfo)
         -- note: `ViewportPos SanityUnknown` will be handled by
         -- `setPosHelper`
         ((Pos lastPosRec) as lastPos)
 
     = let
-        lastScrollClockTime
-            = state.lastScrollClock
+        newScrollClockTime
+            = newScrollClock
             |> Time.posixToMillis
 
         lastVirtualPageNumVal
             = lastPosRec.virtualPageNum
             |> fromPageNum
             |> toFloat
-              
+
         absolutePos
             = calcRealViewportPos settings lastPos
-                
+
         relativePos
             = newViewportPosVal
               - ( lastPosRec.lastViewportPos
@@ -546,51 +544,100 @@ updatePosAndRealViewportPos
                   )
 
         isObsolete
-            = lastScrollClockTime + scrollStopCheckTime
-              < lastPosRec.lastClockTime
+            = lastPosRec.lastClockTime + scrollStopCheckTime
+              < newScrollClockTime
+
    in
-       let ((Pos newPosRec) as newPos)
-               = if ( isObsolete ||
-                      -- ^ start fresh with updated state value
-                     ( absolutePos < 0 && relativePos > 0 ) ||
-                     -- ^ hit the front, now go backward
-                     ( absolutePos > lastSceneLength && relativePos < 0 )
-                     -- ^ hit the back, now go forward
-                    )
+       let
+           ((Pos newPosRec) as newPos)
+               = let
+                   ( state1, mbViewportOffset )
+                       = if absolutePos < 0 then
+                             if relativePos <= 0 then
+                                 -- keep going bellow the scene
+                                 -- : keep hitting the back
+                                 ( state
+                                 , Just <|
+                                       -- to keep realViewportPos =>
+                                       -- lastPosRec.lastViewportOffset
+                                       -- +  (lastPosRec.lastViewportPos
+                                       --         |> fromViewportPos )
+                                       -- == newViewportOffset
+                                       --    + newViewportPos
+                                       -- therefore:
+                                       lastPosRec.lastViewportOffset
+                                       - relativePos
+                                 )
+                             else
+                                 -- stop hitting the front (decreasing in position)
+                                 -- and go backward (increase in position)
+                                 ( { state |
+                                     lastViewportPos
+                                         = relativePos
+                                   }
+                                 , Nothing
+                                 )
+                         else
+                             if absolutePos > lastSceneLength then
+                                 if relativePos >= 0 then
+                                     -- keep going beyond the scene
+                                     -- : keep hitting the back
+                                     ( state
+                                     , Just <|
+                                           lastPosRec.lastViewportOffset
+                                           - relativePos
+                                     )
 
-                 then
-                     let
-                         state1
-                             = { state |
-                                 lastViewportPos
-                                     = if absolutePos < 0 then
-                                           relativePos
-                                       else
-                                           -- isObsolete or hit the back
-                                           lastSceneLength + relativePos
-                               }
+                                 else
+                                     -- stop hitting the back
+                                     -- (increasing in position)
+                                     -- and go forward (decrease in position)
+                                     ( { state |
+                                         lastViewportPos
+                                             = lastSceneLength + relativePos
+                                       }
+                                     , Nothing
+                                     )
 
-                     in
-                         newPosInfo
-                             |> initPos settings state1
+                             else -- on the Scene
+                                 if isObsolete then
+                                     ( { state |
+                                         lastViewportPos
+                                             = state.lastViewportPos
+                                               + relativePos
+                                       }
+                                     , Nothing
+                                     )
 
+                                 else -- keep continue scrolling as normal
+                                     ( state
+                                     , Just <|
+                                         lastPosRec.lastViewportOffset
+                                     )
 
-                 else
-                     newPosInfo
-                         |> setPosHelper settings state
-                            { initPageNum
-                                  = lastPosRec.virtualPageNum
-                            , mbViewportOffset
-                                  = Just lastPosRec.lastViewportOffset
-                            }
-                         |> Pos
+              in
+                  case mbViewportOffset of
+                      Just _ ->
+                          newPosInfo
+                              |> setPosHelper settings state1
+                                 { initPageNum
+                                       = lastPosRec.virtualPageNum
+                                 , mbViewportOffset
+                                       = mbViewportOffset
+                                 }
+                              |> Pos
+
+                      Nothing ->
+                          newPosInfo
+                              |> initPos settings state1
+
 
        in
            ( newPos,    newPosRec
                            |> okPos
                            |> toRealViewportPosVal settings state
            )
-                     
+
 {-
 {-| make the `Pos` suitable for next `updatePos`
 -}
