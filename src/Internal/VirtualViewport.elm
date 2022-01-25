@@ -5,6 +5,7 @@ module Internal.VirtualViewport
              , emptyPosWith
              , fromPos
              , getViewportPosValue
+             , getLastClockTime
              , PosRecord
              , Settings
              , toSettings
@@ -21,6 +22,7 @@ module Internal.VirtualViewport
              , adjustViewportPos
              , WarpInfo
              , getMaybeWarpInfo
+             , popMaybeWarpInfo
              , initPos
              , updatePosAndRealViewportPos
              , toRealViewportPosVal
@@ -98,6 +100,22 @@ getViewportPosValue : Pos compatibleSanity viewportCompatibleSanity
 getViewportPosValue (Pos posRec)
     = posRec.lastViewportPos
     |> fromViewportPos
+
+{-| retreive `lastClock` from the `Pos`
+-}
+getLastClockTime : Pos compatibleSanity viewportCompatibleSanity ->
+                   Int
+getLastClockTime (Pos posRec)
+    = posRec.lastClockTime
+
+    
+{-| retreive `WarpInfo` from the `Pos`
+-}
+getMaybeWarpInfo : Pos compatibleSanity viewportCompatibleSanity ->
+                   Maybe WarpInfo
+getMaybeWarpInfo (Pos posRec)
+    = posRec.mbLastWarpInfo
+
 
 
 {-| Internal structure for `Pos`
@@ -369,12 +387,17 @@ type alias WarpInfo
 
 
 {-| retreive `WarpInfo` from the `Pos`
+and teturn Pos withough `mbWarpInfo` field
 -}
-getMaybeWarpInfo : Pos compatibleSanity viewportCompatibleSanity ->
-                   Maybe WarpInfo
-getMaybeWarpInfo (Pos posRec)
-    = posRec.mbLastWarpInfo
-
+popMaybeWarpInfo : Pos compatibleSanity viewportCompatibleSanity ->
+                   ( Maybe WarpInfo, Pos compatibleSanity viewportCompatibleSanity)
+popMaybeWarpInfo (Pos posRec)
+    = ( posRec.mbLastWarpInfo
+      , Pos { posRec |
+              mbLastWarpInfo
+                  = Nothing
+            }
+      )
 
 {-| must be not exported -}
 okPos : PosRecord compatibleSanity -> Pos SanityOk compatibleSanity
@@ -420,7 +443,6 @@ initPos ( (Settings { virtualPageLength }) as settings )
         initPageNum
             = lastViewportPos
             |> toInitPageNum settings
-            --|> Debug.log "initPageNum"
 
      in newPosInfo
          |> setPosHelper settings state
@@ -434,6 +456,7 @@ initPos ( (Settings { virtualPageLength }) as settings )
 
 {-| must be not exported
 
+check viewport
 internal help function
 -}
 setPosHelper : Settings SanityOk ->
@@ -455,14 +478,18 @@ setPosHelper ((Settings { virtualPageLength, wormInMargin })
                   as state
              )
              { initPageNum, mbViewportOffset }
-             ( recordTimePosix, newViewportPos )
+             ( recordTimePosix
+             , ((ViewportPos newViewportPosVal) as newViewportPos )
+             )
 
     = let initPageNumVal
               = initPageNum |> fromPageNum
 
-          ( adjustPageNumVal, syncedViewportPos )
-              = newViewportPos
-              |> adjustViewportPos settings state
+          ( adjustPageNumVal,
+           ((ViewportPos syncedViewportPosVal)
+                as syncedViewportPos) ) =
+              newViewportPos
+                  |> adjustViewportPos settings state
 
           adjustedPageNum
               = initPageNumVal + adjustPageNumVal
@@ -474,13 +501,9 @@ setPosHelper ((Settings { virtualPageLength, wormInMargin })
           pageLengthVal
               = virtualPageLength |> fromPageLength
 
-          -- real viewport value when get it from `Dom.getViewportOf`
-          viewportPosVal
-              = syncedViewportPos |> fromViewportPos
-
           -- subtract margin size
           virtualViewportPosVal
-              = viewportPosVal - wormInMargin
+              = syncedViewportPosVal - wormInMargin
 
           virtualTotalPageLength
               = pageNumVal * pageLengthVal
@@ -489,9 +512,13 @@ setPosHelper ((Settings { virtualPageLength, wormInMargin })
               = lastViewportPos - virtualTotalPageLength
 
           syncedLastViewportOffset
-              = mbViewportOffset
-              |> Maybe.withDefault
-                 (restRealViewPortPosVal - virtualViewportPosVal)
+              = case ( mbViewportOffset
+                     , adjustPageNumVal /= 0 ) of
+                    ( Just viewportOffset, False ) ->
+                        viewportOffset
+                    _ ->
+                        -- ( Just viewportOffset, True )
+                        (restRealViewPortPosVal - virtualViewportPosVal)
 
           mbLastWarpInfo
               = if adjustPageNumVal == 0 then
@@ -522,7 +549,7 @@ setPosHelper ((Settings { virtualPageLength, wormInMargin })
          }
 
 
-{-| check `Pos` value against the time and give *sanitized* value to use.
+{-| 
 -}
 updatePosAndRealViewportPos
     : Settings SanityOk ->
@@ -539,7 +566,8 @@ updatePosAndRealViewportPos
 
 updatePosAndRealViewportPos
         ( (Settings {virtualPageLength}) as settings)
-        ({ lastScrollClock, scrollStopCheckTime, lastSceneLength } as state)
+        ({ lastScrollClock, scrollStopCheckTime,
+           lastViewportLength, lastSceneLength } as state)
         (( newScrollClock, (ViewportPos newViewportPosVal) ) as newPosInfo)
         -- note: `ViewportPos SanityUnknown` will be handled by
         -- `setPosHelper`
@@ -578,46 +606,36 @@ updatePosAndRealViewportPos
                                  -- keep going bellow the scene
                                  -- : keep hitting the back
                                  ( state
-                                 , Just <|
-                                       -- to keep realViewportPos =>
-                                       -- lastPosRec.lastViewportOffset
-                                       -- +  (lastPosRec.lastViewportPos
-                                       --         |> fromViewportPos )
-                                       -- == newViewportOffset
-                                       --    + newViewportPos
-                                       -- therefore:
-                                       lastPosRec.lastViewportOffset
-                                           - relativePos
+                                 , lastPosRec.lastViewportOffset
+                                    - relativePos
+                                    |> Just
+
                                  )
                              else
                                  -- stop hitting the front (decreasing in position)
                                  -- and go backward (increase in position)
-                                 ( { state |
-                                     lastViewportPos
-                                         = relativePos
-                                   }
+                                 ( state
                                  , Nothing
                                  )
                          else
-                             if absolutePos > lastSceneLength then
+                             if (absolutePos + lastViewportLength)
+                                 > lastSceneLength
+                             then
                                  if relativePos >= 0 then
                                      -- keep going beyond the scene
                                      -- : keep hitting the back
                                      ( state
-                                     , Just <|
-                                           lastPosRec.lastViewportOffset
-                                               - relativePos
+                                     , lastPosRec.lastViewportOffset
+                                        - relativePos
+                                        |> Just
                                      )
 
                                  else
                                      -- stop hitting the back
                                      -- (increasing in position)
                                      -- and go forward (decrease in position)
-                                     ( { state |
-                                         lastViewportPos
-                                             = lastSceneLength + relativePos
-                                       }
-                                     , Nothing
+                                     ( state
+                                     , Nothing                               
                                      )
 
                              else -- on the Scene
@@ -626,6 +644,7 @@ updatePosAndRealViewportPos
                                          lastViewportPos
                                              = state.lastViewportPos
                                                + relativePos
+                                             |> Debug.log "test"
                                        }
                                      , Nothing
                                      )
@@ -686,6 +705,7 @@ calcRealViewportPos (Settings { virtualPageLength, wormInMargin })
    in
 
        ( virtualPageNum |> fromPageNum |> toFloat ) * pageLength
+           
 
 
        |> (+) ( ( lastViewportPos |> fromViewportPos )
@@ -706,7 +726,6 @@ toRealViewportPosVal
 
 toRealViewportPosVal settings { lastSceneLength } pos
     = calcRealViewportPos settings pos
-       --|> Debug.log "orig calculated"
-       |> max 0
-       |> min lastSceneLength
-       --|> Debug.log "bounded"
+          |> max 0
+          |> min lastSceneLength
+

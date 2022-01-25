@@ -5260,6 +5260,7 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$MilliPixel = function (a
 	return {$: 'MilliPixel', a: a};
 };
 var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$OptionLengthUnknown = {$: 'OptionLengthUnknown'};
+var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$StarWars = {$: 'StarWars'};
 var $elm$core$Dict$RBEmpty_elm_builtin = {$: 'RBEmpty_elm_builtin'};
 var $elm$core$Dict$empty = $elm$core$Dict$RBEmpty_elm_builtin;
 var $elm$core$Set$Set_elm_builtin = function (a) {
@@ -6036,6 +6037,7 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$initBasicState = functio
 		lastSceneLength: -1,
 		lastScrollClock: $elm$time$Time$millisToPosix(0),
 		lastSyncedScrollPos: $elm$core$Maybe$Nothing,
+		lastViewportChannel: $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$StarWars,
 		optionCenterRelPos: -1,
 		optionIdInTheCenter: $elm$core$Maybe$Nothing,
 		optionIdToItemDict: $elm$core$Dict$empty,
@@ -6046,7 +6048,7 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$initBasicState = functio
 		scrollStopCheckTime: 75,
 		scrollTraceMP: $elm$core$Set$empty,
 		targetIdString: $elm$core$Maybe$Nothing,
-		testingValue: 'init',
+		virtualControlChannel: $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$StarWars,
 		virtualControlPos: $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$emptyPosWith(virtualControlSettings),
 		virtualControlSettings: virtualControlSettings
 	};
@@ -6729,6 +6731,9 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncCenterOption = F4(
 	function (a, b, c, d) {
 		return {$: 'SyncCenterOption', a: a, b: b, c: c, d: d};
 	});
+var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncControlChannel = function (a) {
+	return {$: 'SyncControlChannel', a: a};
+};
 var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncLastScroll = F3(
 	function (a, b, c) {
 		return {$: 'SyncLastScroll', a: a, b: b, c: c};
@@ -6847,6 +6852,10 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$getCenterPosAndLengthOfH
 var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$getControlIdString = function (state) {
 	return 'ctl-' + state.idString;
 };
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$getLastClockTime = function (_v0) {
+	var posRec = _v0.a;
+	return posRec.lastClockTime;
+};
 var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$getMaybeWarpInfo = function (_v0) {
 	var posRec = _v0.a;
 	return posRec.mbLastWarpInfo;
@@ -6875,127 +6884,6 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$getOptions = function (s
 		},
 		$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$getOptionsWrapped(state));
 };
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toElementLength = function (_v0) {
-	var virtualPageLength = _v0.a.virtualPageLength;
-	var wormInMargin = _v0.a.wormInMargin;
-	return $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength) + (wormInMargin * 2);
-};
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$boundedViewportPosVal = F2(
-	function (settings, posVal) {
-		return A2(
-			$elm$core$Basics$min,
-			$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toElementLength(settings),
-			A2($elm$core$Basics$max, 0, posVal));
-	});
-var $elm$core$Basics$ge = _Utils_ge;
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$okViewportPos = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$ViewportPos;
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$adjustViewportPos = F3(
-	function (settings, state, _v0) {
-		var virtualPageLength = settings.a.virtualPageLength;
-		var wormInMargin = settings.a.wormInMargin;
-		var wormOutPadding = settings.a.wormOutPadding;
-		var lastViewportLength = state.lastViewportLength;
-		var vposValOrig = _v0.a;
-		var vposValLower = A2($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$boundedViewportPosVal, settings, vposValOrig);
-		var vposValHigher = vposValLower + lastViewportLength;
-		var pageLength = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength);
-		var higherWormInMarginAbs = wormInMargin + pageLength;
-		var elementLength = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toElementLength(settings);
-		var _v1 = (_Utils_cmp(vposValLower, wormInMargin) < 1) ? _Utils_Tuple2(-1, (vposValLower + pageLength) - lastViewportLength) : ((_Utils_cmp(vposValHigher, higherWormInMarginAbs) > -1) ? _Utils_Tuple2(1, (vposValLower + wormOutPadding) - pageLength) : _Utils_Tuple2(0, vposValLower));
-		var adjustPageAmount = _v1.a;
-		var vposVal1 = _v1.b;
-		return _Utils_Tuple2(
-			adjustPageAmount,
-			$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$okViewportPos(vposVal1));
-	});
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$boundPageNum = F3(
-	function (_v0, lastSceneLength, pageNumVal) {
-		var virtualPageLength = _v0.a.virtualPageLength;
-		var oneMoreThanMaxPageNumVal = $elm$core$Basics$ceiling(
-			lastSceneLength / $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength));
-		return $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$PageNum(
-			A2(
-				$elm$core$Basics$min,
-				oneMoreThanMaxPageNumVal,
-				A2($elm$core$Basics$max, -1, pageNumVal)));
-	});
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageNum = function (_v0) {
-	var value = _v0.a;
-	return value;
-};
-var $elm$time$Time$posixToMillis = function (_v0) {
-	var millis = _v0.a;
-	return millis;
-};
-var $elm$core$Maybe$withDefault = F2(
-	function (_default, maybe) {
-		if (maybe.$ === 'Just') {
-			var value = maybe.a;
-			return value;
-		} else {
-			return _default;
-		}
-	});
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$setPosHelper = F4(
-	function (settings, state, _v0, _v1) {
-		var virtualPageLength = settings.a.virtualPageLength;
-		var wormInMargin = settings.a.wormInMargin;
-		var lastViewportPos = state.lastViewportPos;
-		var lastSceneLength = state.lastSceneLength;
-		var initPageNum = _v0.initPageNum;
-		var mbViewportOffset = _v0.mbViewportOffset;
-		var recordTimePosix = _v1.a;
-		var newViewportPos = _v1.b;
-		var pageLengthVal = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength);
-		var initPageNumVal = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageNum(initPageNum);
-		var _v2 = A3($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$adjustViewportPos, settings, state, newViewportPos);
-		var adjustPageNumVal = _v2.a;
-		var syncedViewportPos = _v2.b;
-		var adjustedPageNum = A3($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$boundPageNum, settings, lastSceneLength, initPageNumVal + adjustPageNumVal);
-		var pageNumVal = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageNum(adjustedPageNum);
-		var virtualTotalPageLength = pageNumVal * pageLengthVal;
-		var restRealViewPortPosVal = lastViewportPos - virtualTotalPageLength;
-		var viewportPosVal = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromViewportPos(syncedViewportPos);
-		var virtualViewportPosVal = viewportPosVal - wormInMargin;
-		var mbLastWarpInfo = (!adjustPageNumVal) ? $elm$core$Maybe$Nothing : $elm$core$Maybe$Just(
-			{
-				from: _Utils_Tuple2(
-					$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$PageNum(initPageNumVal),
-					$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$ViewportPos(virtualViewportPosVal)),
-				to: _Utils_Tuple2(adjustedPageNum, syncedViewportPos)
-			});
-		var syncedLastViewportOffset = A2($elm$core$Maybe$withDefault, restRealViewPortPosVal - virtualViewportPosVal, mbViewportOffset);
-		return {
-			lastClockTime: $elm$time$Time$posixToMillis(recordTimePosix),
-			lastViewportOffset: syncedLastViewportOffset,
-			lastViewportPos: syncedViewportPos,
-			mbLastWarpInfo: mbLastWarpInfo,
-			virtualPageNum: adjustedPageNum
-		};
-	});
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toInitPageNum = F2(
-	function (settings, lastViewportPos) {
-		var virtualPageLength = settings.a.virtualPageLength;
-		return function (n) {
-			return $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$PageNum(n - 1);
-		}(
-			$elm$core$Basics$ceiling(
-				lastViewportPos / $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength)));
-	});
-var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$initPos = F3(
-	function (settings, state, newPosInfo) {
-		var virtualPageLength = settings.a.virtualPageLength;
-		var lastScrollClock = state.lastScrollClock;
-		var lastViewportPos = state.lastViewportPos;
-		var initPageNum = A2($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toInitPageNum, settings, lastViewportPos);
-		return $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$Pos(
-			A4(
-				$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$setPosHelper,
-				settings,
-				state,
-				{initPageNum: initPageNum, mbViewportOffset: $elm$core$Maybe$Nothing},
-				newPosInfo));
-	});
 var $elm$core$Set$insert = F2(
 	function (key, _v0) {
 		var dict = _v0.a;
@@ -7023,6 +6911,10 @@ var $elm$core$List$drop = F2(
 			}
 		}
 	});
+var $elm$time$Time$posixToMillis = function (_v0) {
+	var millis = _v0.a;
+	return millis;
+};
 var $mdgriffith$elm_style_animation$Animation$extractInitialWait = function (steps) {
 	var _v0 = $elm$core$List$head(steps);
 	if (_v0.$ === 'Nothing') {
@@ -7120,6 +7012,7 @@ var $elm$core$Task$map3 = F4(
 			},
 			taskA);
 	});
+var $elm$core$Basics$neq = _Utils_notEqual;
 var $elm$time$Time$Name = function (a) {
 	return {$: 'Name', a: a};
 };
@@ -7132,6 +7025,15 @@ var $elm$time$Time$Zone = F2(
 	});
 var $elm$time$Time$customZone = $elm$time$Time$Zone;
 var $elm$time$Time$now = _Time_now($elm$time$Time$millisToPosix);
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$popMaybeWarpInfo = function (_v0) {
+	var posRec = _v0.a;
+	return _Utils_Tuple2(
+		posRec.mbLastWarpInfo,
+		$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$Pos(
+			_Utils_update(
+				posRec,
+				{mbLastWarpInfo: $elm$core$Maybe$Nothing})));
+};
 var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$rectangleToGeom = function (rect) {
 	return {height: rect.height, width: rect.width, x: 0, y: 0};
 };
@@ -7186,6 +7088,7 @@ var $elm$core$Basics$cos = _Basics_cos;
 var $elm$core$Basics$degrees = function (angleInDegrees) {
 	return (angleInDegrees * $elm$core$Basics$pi) / 180;
 };
+var $elm$core$Basics$ge = _Utils_ge;
 var $elm$core$Basics$sin = _Basics_sin;
 var $mdgriffith$elm_style_animation$Animation$Render$pathCmdValue = function (cmd) {
 	var renderPoints = function (coords) {
@@ -7624,7 +7527,14 @@ var $elm$core$String$toFloat = _String_toFloat;
 var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$toMilliPixel = function (floatVal) {
 	return $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$MilliPixel((floatVal * 1000) | 0);
 };
-var $elm$core$Basics$neq = _Utils_notEqual;
+var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$StarTrek = {$: 'StarTrek'};
+var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$toggleControlChannel = function (orig) {
+	if (orig.$ === 'StarWars') {
+		return $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$StarTrek;
+	} else {
+		return $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$StarWars;
+	}
+};
 var $mdgriffith$elm_style_animation$Animation$Model$refreshTiming = F2(
 	function (now, timing) {
 		var dt = $elm$time$Time$posixToMillis(now) - $elm$time$Time$posixToMillis(timing.current);
@@ -7753,6 +7663,15 @@ var $mdgriffith$elm_style_animation$Animation$Model$isCmdDone = function (cmd) {
 			return true;
 	}
 };
+var $elm$core$Maybe$withDefault = F2(
+	function (_default, maybe) {
+		if (maybe.$ === 'Just') {
+			var value = maybe.a;
+			return value;
+		} else {
+			return _default;
+		}
+	});
 var $mdgriffith$elm_style_animation$Animation$Model$isDone = function (property) {
 	var motionDone = function (motion) {
 		var runningInterpolation = A2($elm$core$Maybe$withDefault, motion.interpolation, motion.interpolationOverride);
@@ -9103,6 +9022,10 @@ var $mdgriffith$elm_style_animation$Animation$Messenger$update = F2(
 		return A2($mdgriffith$elm_style_animation$Animation$Model$updateAnimation, tick, animation);
 	});
 var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateOptionLengthMaxTry = 100;
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageNum = function (_v0) {
+	var value = _v0.a;
+	return value;
+};
 var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$calcRealViewportPos = F2(
 	function (_v0, _v1) {
 		var virtualPageLength = _v0.a.virtualPageLength;
@@ -9114,6 +9037,118 @@ var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$calcRealViewportPos = 
 		var lastViewportPos = _v2.lastViewportPos;
 		var lastViewportOffset = _v2.lastViewportOffset;
 		return lastViewportOffset + (($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromViewportPos(lastViewportPos) - wormInMargin) + ($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageNum(virtualPageNum) * pageLength));
+	});
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toElementLength = function (_v0) {
+	var virtualPageLength = _v0.a.virtualPageLength;
+	var wormInMargin = _v0.a.wormInMargin;
+	return $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength) + (wormInMargin * 2);
+};
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$boundedViewportPosVal = F2(
+	function (settings, posVal) {
+		return A2(
+			$elm$core$Basics$min,
+			$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toElementLength(settings),
+			A2($elm$core$Basics$max, 0, posVal));
+	});
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$okViewportPos = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$ViewportPos;
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$adjustViewportPos = F3(
+	function (settings, state, _v0) {
+		var virtualPageLength = settings.a.virtualPageLength;
+		var wormInMargin = settings.a.wormInMargin;
+		var wormOutPadding = settings.a.wormOutPadding;
+		var lastViewportLength = state.lastViewportLength;
+		var vposValOrig = _v0.a;
+		var vposValLower = A2($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$boundedViewportPosVal, settings, vposValOrig);
+		var vposValHigher = vposValLower + lastViewportLength;
+		var pageLength = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength);
+		var higherWormInMarginAbs = wormInMargin + pageLength;
+		var elementLength = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toElementLength(settings);
+		var _v1 = (_Utils_cmp(vposValLower, wormInMargin) < 1) ? _Utils_Tuple2(-1, (vposValLower + pageLength) - lastViewportLength) : ((_Utils_cmp(vposValHigher, higherWormInMarginAbs) > -1) ? _Utils_Tuple2(1, (vposValLower + wormOutPadding) - pageLength) : _Utils_Tuple2(0, vposValLower));
+		var adjustPageAmount = _v1.a;
+		var vposVal1 = _v1.b;
+		return _Utils_Tuple2(
+			adjustPageAmount,
+			$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$okViewportPos(vposVal1));
+	});
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$boundPageNum = F3(
+	function (_v0, lastSceneLength, pageNumVal) {
+		var virtualPageLength = _v0.a.virtualPageLength;
+		var oneMoreThanMaxPageNumVal = $elm$core$Basics$ceiling(
+			lastSceneLength / $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength));
+		return $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$PageNum(
+			A2(
+				$elm$core$Basics$min,
+				oneMoreThanMaxPageNumVal,
+				A2($elm$core$Basics$max, -1, pageNumVal)));
+	});
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$setPosHelper = F4(
+	function (settings, state, _v0, _v1) {
+		var virtualPageLength = settings.a.virtualPageLength;
+		var wormInMargin = settings.a.wormInMargin;
+		var lastViewportPos = state.lastViewportPos;
+		var lastSceneLength = state.lastSceneLength;
+		var initPageNum = _v0.initPageNum;
+		var mbViewportOffset = _v0.mbViewportOffset;
+		var recordTimePosix = _v1.a;
+		var newViewportPos = _v1.b;
+		var newViewportPosVal = newViewportPos.a;
+		var pageLengthVal = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength);
+		var initPageNumVal = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageNum(initPageNum);
+		var _v2 = A3($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$adjustViewportPos, settings, state, newViewportPos);
+		var adjustPageNumVal = _v2.a;
+		var syncedViewportPos = _v2.b;
+		var syncedViewportPosVal = syncedViewportPos.a;
+		var adjustedPageNum = A3($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$boundPageNum, settings, lastSceneLength, initPageNumVal + adjustPageNumVal);
+		var pageNumVal = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageNum(adjustedPageNum);
+		var virtualTotalPageLength = pageNumVal * pageLengthVal;
+		var restRealViewPortPosVal = lastViewportPos - virtualTotalPageLength;
+		var virtualViewportPosVal = syncedViewportPosVal - wormInMargin;
+		var mbLastWarpInfo = (!adjustPageNumVal) ? $elm$core$Maybe$Nothing : $elm$core$Maybe$Just(
+			{
+				from: _Utils_Tuple2(
+					$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$PageNum(initPageNumVal),
+					$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$ViewportPos(virtualViewportPosVal)),
+				to: _Utils_Tuple2(adjustedPageNum, syncedViewportPos)
+			});
+		var syncedLastViewportOffset = function () {
+			var _v3 = _Utils_Tuple2(mbViewportOffset, !(!adjustPageNumVal));
+			if ((_v3.a.$ === 'Just') && (!_v3.b)) {
+				var viewportOffset = _v3.a.a;
+				return viewportOffset;
+			} else {
+				return restRealViewPortPosVal - virtualViewportPosVal;
+			}
+		}();
+		return {
+			lastClockTime: $elm$time$Time$posixToMillis(recordTimePosix),
+			lastViewportOffset: syncedLastViewportOffset,
+			lastViewportPos: syncedViewportPos,
+			mbLastWarpInfo: mbLastWarpInfo,
+			virtualPageNum: adjustedPageNum
+		};
+	});
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toInitPageNum = F2(
+	function (settings, lastViewportPos) {
+		var virtualPageLength = settings.a.virtualPageLength;
+		return function (n) {
+			return $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$PageNum(n - 1);
+		}(
+			$elm$core$Basics$ceiling(
+				lastViewportPos / $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromPageLength(virtualPageLength)));
+	});
+var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$initPos = F3(
+	function (settings, state, newPosInfo) {
+		var virtualPageLength = settings.a.virtualPageLength;
+		var lastScrollClock = state.lastScrollClock;
+		var lastViewportPos = state.lastViewportPos;
+		var initPageNum = A2($jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toInitPageNum, settings, lastViewportPos);
+		return $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$Pos(
+			A4(
+				$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$setPosHelper,
+				settings,
+				state,
+				{initPageNum: initPageNum, mbViewportOffset: $elm$core$Maybe$Nothing},
+				newPosInfo));
 	});
 var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$okPos = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$Pos;
 var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$toRealViewportPosVal = F3(
@@ -9132,6 +9167,7 @@ var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$updatePosAndRealViewpo
 		var virtualPageLength = settings.a.virtualPageLength;
 		var lastScrollClock = state.lastScrollClock;
 		var scrollStopCheckTime = state.scrollStopCheckTime;
+		var lastViewportLength = state.lastViewportLength;
 		var lastSceneLength = state.lastSceneLength;
 		var newScrollClock = newPosInfo.a;
 		var newViewportPosVal = newPosInfo.b.a;
@@ -9144,20 +9180,14 @@ var $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$updatePosAndRealViewpo
 		var newPos = function () {
 			var _v0 = (absolutePos < 0) ? ((relativePos <= 0) ? _Utils_Tuple2(
 				state,
-				$elm$core$Maybe$Just(lastPosRec.lastViewportOffset - relativePos)) : _Utils_Tuple2(
-				_Utils_update(
-					state,
-					{lastViewportPos: relativePos}),
-				$elm$core$Maybe$Nothing)) : ((_Utils_cmp(absolutePos, lastSceneLength) > 0) ? ((relativePos >= 0) ? _Utils_Tuple2(
+				$elm$core$Maybe$Just(lastPosRec.lastViewportOffset - relativePos)) : _Utils_Tuple2(state, $elm$core$Maybe$Nothing)) : ((_Utils_cmp(absolutePos + lastViewportLength, lastSceneLength) > 0) ? ((relativePos >= 0) ? _Utils_Tuple2(
 				state,
-				$elm$core$Maybe$Just(lastPosRec.lastViewportOffset - relativePos)) : _Utils_Tuple2(
+				$elm$core$Maybe$Just(lastPosRec.lastViewportOffset - relativePos)) : _Utils_Tuple2(state, $elm$core$Maybe$Nothing)) : (isObsolete ? _Utils_Tuple2(
 				_Utils_update(
 					state,
-					{lastViewportPos: lastSceneLength + relativePos}),
-				$elm$core$Maybe$Nothing)) : (isObsolete ? _Utils_Tuple2(
-				_Utils_update(
-					state,
-					{lastViewportPos: state.lastViewportPos + relativePos}),
+					{
+						lastViewportPos: A2($elm$core$Debug$log, 'test', state.lastViewportPos + relativePos)
+					}),
 				$elm$core$Maybe$Nothing) : _Utils_Tuple2(
 				state,
 				$elm$core$Maybe$Just(lastPosRec.lastViewportOffset))));
@@ -9193,6 +9223,7 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$Theme$withDefault = F2(
 			return value;
 		}
 	});
+var $elm$core$Basics$xor = _Basics_xor;
 var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 	function (appModel, theme, msg, state) {
 		var messageMapWith = appModel.messageMapWith;
@@ -9213,8 +9244,9 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 			$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$defaultPaddingLengthFrom(shadeLength),
 			theme.paddingLength);
 		var messageMap = messageMapWith(state.idString);
-		var isInScrollTraceHelper = function (_v35) {
-			var mpInt = _v35.a;
+		var isVirtualControlOnSameChannel = _Utils_eq(state.lastViewportChannel, state.virtualControlChannel);
+		var isInScrollTraceHelper = function (_v33) {
+			var mpInt = _v33.a;
 			return A2(
 				$elm$core$List$map,
 				function (mpInt1) {
@@ -9292,6 +9324,15 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 				posAccessor),
 			$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$taskGetViewport(
 				$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$getControlIdString(state)));
+		var taskGetViewViewportPos = A2(
+			$elm$core$Task$map,
+			A2(
+				$elm$core$Basics$composeR,
+				function ($) {
+					return $.viewport;
+				},
+				posAccessor),
+			$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$taskGetViewport(state.idString));
 		var taskGetViewViewportPosAndSceneLength = A2(
 			$elm$core$Task$map,
 			function (vp) {
@@ -9465,28 +9506,46 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 			case 'OnScroll':
 				return _Utils_Tuple2(
 					state,
-					A2(
-						$elm$core$Task$perform,
-						messageMap,
-						function () {
-							var _v8 = state.optionLengthInfoStatus;
-							if (_v8.$ === 'OptionLengthUpdated') {
-								return A2(
-									$elm$core$Task$onError,
-									$elm$core$Basics$always(
-										$elm$core$Task$succeed($jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$NoOp)),
-									A4(
-										$elm$core$Task$map3,
-										$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncVirtualControlPos,
-										$elm$time$Time$now,
-										A2($elm$core$Task$map, $elm$core$Tuple$first, taskGetViewViewportPosAndSceneLength),
-										taskGetControlViewportPos));
-							} else {
-								return $elm$core$Task$succeed(
-									$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$InitViewportsMsg(
-										$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$UpdateOptionLengths($elm$core$Maybe$Nothing)));
-							}
-						}()));
+					$elm$core$Platform$Cmd$batch(
+						A2(
+							$elm$core$List$map,
+							$elm$core$Task$perform(messageMap),
+							_List_fromArray(
+								[
+									function () {
+									var _v8 = state.optionLengthInfoStatus;
+									if (_v8.$ === 'OptionLengthUpdated') {
+										return A2(
+											$elm$core$Task$onError,
+											$elm$core$Basics$always(
+												$elm$core$Task$succeed($jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$NoOp)),
+											A4($elm$core$Task$map3, $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncVirtualControlPos, $elm$time$Time$now, taskGetViewViewportPos, taskGetControlViewportPos));
+									} else {
+										return $elm$core$Task$succeed(
+											$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$InitViewportsMsg(
+												$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$UpdateOptionLengths($elm$core$Maybe$Nothing)));
+									}
+								}(),
+									A2(
+									$elm$core$Task$map,
+									$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncControlChannel,
+									A2(
+										$elm$core$Task$andThen,
+										$elm$core$Basics$always($elm$time$Time$now),
+										A2($elm$core$Basics$composeL, $elm$core$Process$sleep, $elm$core$Basics$toFloat)(state.scrollStopCheckTime)))
+								]))));
+			case 'SyncControlChannel':
+				var now = msg.a;
+				return ((_Utils_cmp(
+					function (n) {
+						return n + state.scrollStopCheckTime;
+					}(
+						$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$getLastClockTime(state.virtualControlPos)),
+					$elm$time$Time$posixToMillis(now)) < 1) && (!isVirtualControlOnSameChannel)) ? _Utils_Tuple2(
+					_Utils_update(
+						state,
+						{virtualControlChannel: state.lastViewportChannel}),
+					$elm$core$Platform$Cmd$none) : _Utils_Tuple2(state, $elm$core$Platform$Cmd$none);
 			case 'OnKey':
 				var keyCodeString = msg.a;
 				var _v9 = $elm$core$Debug$log('key code:');
@@ -9495,23 +9554,17 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 				var clock = msg.a;
 				var currRealViewportPosVal = msg.b;
 				var newControlViewportPosVal = msg.c;
-				var _v10 = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$getMaybeWarpInfo(state.virtualControlPos);
-				if (_v10.$ === 'Just') {
+				var _v10 = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$popMaybeWarpInfo(state.virtualControlPos);
+				if (_v10.a.$ === 'Just') {
+					var cleanVirtualControlPos = _v10.b;
 					return _Utils_Tuple2(
 						_Utils_update(
 							state,
-							{
-								virtualControlPos: A3(
-									$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$initPos,
-									state.virtualControlSettings,
-									virtualState(currRealViewportPosVal),
-									_Utils_Tuple2(
-										clock,
-										$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$makeViewportPos(newControlViewportPosVal)))
-							}),
+							{virtualControlPos: cleanVirtualControlPos}),
 						$elm$core$Platform$Cmd$none);
 				} else {
-					var _v11 = A4(
+					var _v11 = _v10.a;
+					var _v12 = A4(
 						$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$updatePosAndRealViewportPos,
 						state.virtualControlSettings,
 						virtualState(currRealViewportPosVal),
@@ -9519,8 +9572,12 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 							clock,
 							$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$makeViewportPos(newControlViewportPosVal)),
 						state.virtualControlPos);
-					var newVirtualControlPos = _v11.a;
-					var newRealViewportPosVal = _v11.b;
+					var newVirtualControlPos = _v12.a;
+					var newRealViewportPosVal = _v12.b;
+					var posChanged = !_Utils_eq(
+						state.lastSyncedScrollPos,
+						$elm$core$Maybe$Just(newRealViewportPosVal));
+					var needToSyncLastScroll = posChanged;
 					var taskSyncLastScroll = A2(
 						$elm$core$Task$onError,
 						$elm$core$Basics$always(
@@ -9532,47 +9589,38 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 									$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncLastScroll,
 									now,
 									newRealViewportPosVal,
-									(A3($elm$core$Basics$composeL, $elm$core$Basics$not, $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$isPickerControlReady, state) && $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$isSnapping(state)) || _Utils_eq(state.lastSyncedScrollPos, $elm$core$Maybe$Nothing));
+									_Utils_eq(state.lastSyncedScrollPos, $elm$core$Maybe$Nothing));
 							},
 							$elm$time$Time$now));
 					return _Utils_Tuple2(
 						_Utils_update(
 							state,
-							{virtualControlPos: newVirtualControlPos}),
+							{
+								lastViewportChannel: (posChanged !== isVirtualControlOnSameChannel) ? $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$toggleControlChannel(state.lastViewportChannel) : state.lastViewportChannel,
+								virtualControlPos: newVirtualControlPos
+							}),
 						$elm$core$Platform$Cmd$batch(
 							A2(
 								$elm$core$List$map,
 								$elm$core$Task$perform(messageMap),
-								function () {
-									var _v12 = _Utils_Tuple2(
-										_Utils_eq(
-											state.lastSyncedScrollPos,
-											$elm$core$Maybe$Just(newRealViewportPosVal)),
-										$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$getMaybeWarpInfo(newVirtualControlPos));
-									if (_v12.b.$ === 'Just') {
-										var isSameViewportPos = _v12.a;
-										var warpInfo = _v12.b.a;
-										return (isSameViewportPos ? $elm$core$Basics$identity : function (ls) {
-											return A2($elm$core$List$cons, taskSyncLastScroll, ls);
-										})(
-											$elm$core$List$singleton(
+								(needToSyncLastScroll ? function (ls) {
+									return A2($elm$core$List$cons, taskSyncLastScroll, ls);
+								} : $elm$core$Basics$identity)(
+									function () {
+										var _v13 = $jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$getMaybeWarpInfo(newVirtualControlPos);
+										if (_v13.$ === 'Just') {
+											var warpInfo = _v13.a;
+											return $elm$core$List$singleton(
 												$elm$core$Task$succeed(
 													A2(
 														$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SetViewport,
 														$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SelectViewport($jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$ForControl),
 														$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$toMilliPixel(
-															$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromViewportPos(warpInfo.to.b))))));
-									} else {
-										if (!_v12.a) {
-											var _v13 = _v12.b;
-											return _List_fromArray(
-												[taskSyncLastScroll]);
+															$jeongoon$elmnt_scrollpicker$Internal$VirtualViewport$fromViewportPos(warpInfo.to.b)))));
 										} else {
-											var _v14 = _v12.b;
 											return _List_Nil;
 										}
-									}
-								}())));
+									}()))));
 				}
 			case 'SyncLastScroll':
 				var clock = msg.a;
@@ -9627,10 +9675,10 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 						A3(
 							$elm$core$Task$map2,
 							F2(
-								function (_v15, _v16) {
-									var frameCenterPos = _v15.a;
-									var frameVpStartPos = _v16.a;
-									var frameVpCenterPos = _v16.b;
+								function (_v14, _v15) {
+									var frameCenterPos = _v14.a;
+									var frameVpStartPos = _v15.a;
+									var frameVpCenterPos = _v15.b;
 									return A4($jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$FindCenterOptionWith, frameCenterPos, frameVpStartPos, frameVpCenterPos, $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SetSnapToTargetOption);
 								}),
 							taskGetControlCenterPosAndLength,
@@ -9645,14 +9693,14 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 						function (cursor, lengthList, optIdList) {
 							findCenterOptionWorker:
 							while (true) {
-								var _v18 = _Utils_Tuple2(lengthList, optIdList);
-								if (_v18.a.b && _v18.b.b) {
-									var _v19 = _v18.a;
-									var len = _v19.a;
-									var restLengthList = _v19.b;
-									var _v20 = _v18.b;
-									var oId = _v20.a;
-									var restOptIdList = _v20.b;
+								var _v17 = _Utils_Tuple2(lengthList, optIdList);
+								if (_v17.a.b && _v17.b.b) {
+									var _v18 = _v17.a;
+									var len = _v18.a;
+									var restLengthList = _v18.b;
+									var _v19 = _v17.b;
+									var oId = _v19.a;
+									var restOptIdList = _v19.b;
 									var cursorCenter = ((cursor + cursor) + len) / 2;
 									if ((_Utils_cmp(frameVpCenterPos, cursor + len) < 1) || $elm$core$List$isEmpty(restOptIdList)) {
 										return $elm$core$Maybe$Just(
@@ -9673,9 +9721,9 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 						});
 					var findCenterOption = A3(findCenterOptionWorker, paddingLength, state.optionLengths, state.optionIds);
 					if (findCenterOption.$ === 'Just') {
-						var _v22 = findCenterOption.a;
-						var centerOptionIdString = _v22.a;
-						var optionRelPos = _v22.b;
+						var _v21 = findCenterOption.a;
+						var centerOptionIdString = _v21.a;
+						var optionRelPos = _v21.b;
 						return _Utils_Tuple2(
 							A4($jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$setCenterOption, centerOptionIdString, frameElCenterPos, optionRelPos, state),
 							_Utils_eq(
@@ -9755,8 +9803,8 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 						A4(
 							$elm$core$Task$map3,
 							F3(
-								function (_v23, frameVpPos, optionCenterPos) {
-									var frameCenterPos = _v23.a;
+								function (_v22, frameVpPos, optionCenterPos) {
+									var frameCenterPos = _v22.a;
 									return A4($jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SetSnapToTargetOption, optionIdString, frameCenterPos, frameVpPos, optionCenterPos - frameCenterPos);
 								}),
 							taskGetControlCenterPosAndLength,
@@ -9778,24 +9826,27 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 							A4(
 								$elm$core$Task$map3,
 								F3(
-									function (now, _v25, controlPos) {
-										var currViewPos = _v25.a;
-										return A3($jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncVirtualControlPos, now, currViewPos, controlPos);
+									function (now, viewVp, controlVp) {
+										var viewVp1 = A2(
+											$elm$core$Maybe$withDefault,
+											A2($elm$core$Debug$log, 'newVal', viewVp),
+											A2($elm$core$Debug$log, 'lastSynced', state.lastSyncedScrollPos));
+										return A3($jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$SyncVirtualControlPos, now, viewVp1, controlVp);
 									}),
 								$elm$time$Time$now,
-								taskGetViewViewportPosAndSceneLength,
+								taskGetViewViewportPos,
 								taskGetControlViewportPos))));
 			case 'ScrollPickerFailure':
 				var context = msg.a;
 				var detailString = msg.b;
 				var detailError = msg.c;
-				var _v26 = A2($elm$core$Debug$log, context, detailString);
+				var _v24 = A2($elm$core$Debug$log, context, detailString);
 				return _Utils_Tuple2(state, $elm$core$Platform$Cmd$none);
 			case 'Animate':
 				var animMsg = msg.a;
-				var _v27 = A2($mdgriffith$elm_style_animation$Animation$Messenger$update, animMsg, state.pseudoAnimState);
-				var newAnimState = _v27.a;
-				var animCmd = _v27.b;
+				var _v25 = A2($mdgriffith$elm_style_animation$Animation$Messenger$update, animMsg, state.pseudoAnimState);
+				var newAnimState = _v25.a;
+				var animCmd = _v25.b;
 				var mbNewViewportPos = $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$isSnapping(state) ? A2(
 					$elm$core$Maybe$andThen,
 					$elm$core$String$toFloat,
@@ -9804,8 +9855,8 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 					var newViewportPos = mbNewViewportPos.a;
 					var newViewportPosMP = $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$toMilliPixel(newViewportPos);
 					var scrollTraceMP = function () {
-						var _v31 = newViewportPosMP;
-						var intVal = _v31.a;
+						var _v29 = newViewportPosMP;
+						var intVal = _v29.a;
 						return A2($elm$core$Set$insert, intVal, state.scrollTraceMP);
 					}();
 					return _Utils_Tuple2(
@@ -9831,14 +9882,14 @@ var $jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$updateWith = F4(
 												$elm$core$List$filter,
 												$elm$core$Basics$eq(0),
 												isInScrollTraceHelper(state.finalTargetScrollPosMP))) > 1) {
-											var _v29 = A2(
+											var _v27 = A2(
 												$elm$core$Maybe$andThen,
 												function (idstr) {
 													return A2($elm$core$Dict$get, idstr, state.optionIdToItemDict);
 												},
 												state.targetIdString);
-											if (_v29.$ === 'Just') {
-												var targetOption = _v29.a.a;
+											if (_v27.$ === 'Just') {
+												var targetOption = _v27.a.a;
 												return $elm$core$Task$succeed(
 													$jeongoon$elmnt_scrollpicker$Elmnt$BaseScrollPicker$ScrollPickerSuccess(targetOption));
 											} else {

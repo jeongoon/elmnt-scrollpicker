@@ -294,7 +294,23 @@ makeTwoDim a b
           , endPoint   = a
           }
 
+{-| not exported
 
+indicate just two different types. used in state.virtualControlChannel
+-}
+type VirtualControlChannel
+    = StarWars
+    | StarTrek
+
+{-| not exported
+-}
+toggleControlChannel : VirtualControlChannel -> VirtualControlChannel
+toggleControlChannel orig
+    = case orig of
+          StarWars ->
+              StarTrek
+          StarTrek ->
+              StarWars
 
 {-| not exported
 
@@ -351,6 +367,8 @@ type alias BasicStateLike statExtra optExtra vt msg
       , virtualControlPos       : Virtual.Pos Virtual.SanityUnknown
                                               Virtual.SanityOk
       , virtualControlSettings  : Virtual.Settings Virtual.SanityOk
+      , lastViewportChannel     : VirtualControlChannel
+      , virtualControlChannel   : VirtualControlChannel
       , scrollTraceMP           : Set Int
       , finalTargetScrollPosMP  : MilliPixel
       , scrollStopCheckTime     : Int
@@ -358,7 +376,6 @@ type alias BasicStateLike statExtra optExtra vt msg
       , frameCenterPos          : Float
       , optionCenterRelPos      : Float
       , optionLengthInfoStatus  : OptionLengthInfoStatus
-      , testingValue            : String
       }
 
 
@@ -395,6 +412,7 @@ you could possibly search keyword 'messageMap' where I need to map the
 type Msg optExtra vt msg
     = InitViewportsMsg          InitViewportsChain
     | OnScroll
+    | SyncControlChannel        Time.Posix
     | SyncVirtualControlPos     Time.Posix Float Float
     | SyncLastScroll            Time.Posix Float Bool
 -- ^ sync and initialising
@@ -1485,6 +1503,10 @@ initBasicState idString
                virtualControlSettings
        , virtualControlSettings
              = virtualControlSettings
+       , lastViewportChannel
+             = StarWars
+       , virtualControlChannel
+             = StarWars
        , scrollTraceMP
              = Set.empty
        , finalTargetScrollPosMP
@@ -1499,9 +1521,7 @@ initBasicState idString
              = -1
        , optionLengthInfoStatus
              = OptionLengthUnknown
-       , testingValue
-             = "init"
-       }
+        }
 
 {-| this function shows a way to init your `BasicStateLike` model
 `initBasicState` value.
@@ -1533,6 +1553,8 @@ resetInitBasicState idString state
           , lastSceneLength         = basicSt.lastSceneLength
           , virtualControlPos       = basicSt.virtualControlPos
           , virtualControlSettings  = basicSt.virtualControlSettings
+          , lastViewportChannel     = basicSt.lastViewportChannel
+          , virtualControlChannel   = basicSt.virtualControlChannel
           , scrollTraceMP           = basicSt.scrollTraceMP
           , finalTargetScrollPosMP  = basicSt.finalTargetScrollPosMP
           , scrollStopCheckTime     = basicSt.scrollStopCheckTime
@@ -1540,7 +1562,6 @@ resetInitBasicState idString state
           , frameCenterPos          = basicSt.frameCenterPos
           , optionCenterRelPos      = basicSt.optionCenterRelPos
           , optionLengthInfoStatus  = basicSt.optionLengthInfoStatus
-          , testingValue  = basicSt.testingValue
          }
 
 
@@ -1946,6 +1967,12 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                    (.viewport >> posAccessor)
 
 
+        taskGetViewViewportPos
+            = state.idString
+                |> taskGetViewport
+                |> Task.map
+                   (.viewport >> posAccessor)
+
         taskGetViewViewportPosAndSceneLength
             = state.idString
                 |> taskGetViewport
@@ -1958,6 +1985,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                               |> lengthAccessor
                         )
                    )
+
 
         taskGetOptionCenterPos idstr
             = idstr
@@ -2002,6 +2030,10 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                     = state.scrollStopCheckTime
               }
 
+        isVirtualControlOnSameChannel
+            = state.lastViewportChannel
+              == state.virtualControlChannel
+           
    in
        case msg of
  
@@ -2133,7 +2165,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                          (Task.succeed realViewportPos)
                          taskGetControlViewportPos
                      |> Task.onError
-                           (always <| Task.succeed NoOp)
+                        (always <| Task.succeed NoOp)
                      |> Task.perform messageMap
                    )
 
@@ -2141,28 +2173,50 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                -- note: this Msg only getting from the `ForControl`
                --       not `'ForView`
                ( state
+               , [ ( case state.optionLengthInfoStatus of
+                         OptionLengthUpdated ->
+                             Task.map3
+                             SyncVirtualControlPos
+                             Time.now
+                             taskGetViewViewportPos
+                             taskGetControlViewportPos
+                             |> Task.onError
+                                    (always <| Task.succeed NoOp)
 
-               , ( case state.optionLengthInfoStatus of
-                       OptionLengthUpdated ->
-                           Task.map3
-                               SyncVirtualControlPos
-                               Time.now
-                               (taskGetViewViewportPosAndSceneLength
-                                    |> Task.map Tuple.first
-                               )
-                               taskGetControlViewportPos
-                           |> Task.onError
-                                   (always <| Task.succeed NoOp)
+                         _ ->
+                             -- equivalent to initial state
+                             InitViewportsMsg (UpdateOptionLengths Nothing)
+                                  |> Task.succeed
+                   )
 
-                       _ ->
-                           -- equivalent to initial state
-                           InitViewportsMsg (UpdateOptionLengths Nothing)
-                                |> Task.succeed
-
-
-                 )
-                 |> Task.perform messageMap
+                 , (Process.sleep << toFloat) state.scrollStopCheckTime
+                     |> Task.andThen
+                        (always <| Time.now)
+                     |> Task.map
+                        SyncControlChannel
+                 ]
+                 |> List.map
+                    (Task.perform messageMap)
+                 |> Cmd.batch
                )
+
+           SyncControlChannel now ->
+               if ( ( state.virtualControlPos
+                         |> Virtual.getLastClockTime
+                         |> \n -> n + state.scrollStopCheckTime )
+                        <= Time.posixToMillis now
+                     && (not <| isVirtualControlOnSameChannel)
+                  )
+               then
+                   ( { state |
+                       virtualControlChannel
+                           = state.lastViewportChannel
+                     }
+                   , Cmd.none
+                   )
+
+               else
+                   ( state, Cmd.none )
 
            OnKey keyCodeString -> -- not used yet.
                let _ = Debug.log "key code:"
@@ -2172,7 +2226,6 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
            SyncVirtualControlPos clock
                                  currRealViewportPosVal
                                  newControlViewportPosVal ->
-               
                {- main idea:
 
                     [  Virtual "Viewport" Pos ]
@@ -2185,7 +2238,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                {- jobs:
                   state: update `state.virtualControlPos` with
                          current virtual viewport position.
-                         which involves syncing the state.virtualControlPos 
+                         which involves syncing the state.virtualControlPos
                          with real viewport position.
 
                   cmd:1. if virtual viewport position required to move,
@@ -2193,33 +2246,28 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                       2. send new Msg to sync new real viewport position
 
                 -}
+
                case state.virtualControlPos
-                       |> Virtual.getMaybeWarpInfo
+                       |> Virtual.popMaybeWarpInfo
                of
-                   Just _ ->
+                   ( Just _, cleanVirtualControlPos ) ->
                        -- previously module-generated scroll
                        -- just update state.virtualControlPos
                        -- to remove `mbWarpInfo` data
                        ( { state |
                            virtualControlPos
-                               = ( clock, newControlViewportPosVal
-                                             |> Virtual.makeViewportPos
-                                 )
-                               |> Virtual.initPos
-                                  state.virtualControlSettings
-                                  (virtualState currRealViewportPosVal)
+                               = cleanVirtualControlPos
                          }
                        , Cmd.none
-                       )                       
+                       )
 
-                   Nothing ->
+                   ( Nothing, _ ) ->
                        let
                            ( newVirtualControlPos, newRealViewportPosVal )
                                = state.virtualControlPos
                                |> Virtual.updatePosAndRealViewportPos
                                   state.virtualControlSettings
-                                  (virtualState currRealViewportPosVal
-                                  )
+                                  (virtualState currRealViewportPosVal)
                                   (clock
                                   , newControlViewportPosVal
                                       |> Virtual.makeViewportPos
@@ -2231,67 +2279,64 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                                   (\now ->
                                        SyncLastScroll now
                                        newRealViewportPosVal
-                                       ( ( ( state
-                                              |> (not <<isPickerControlReady) )
-                                            && ( state |> isSnapping)
-                                         )
-                                       || state.lastSyncedScrollPos == Nothing
+                                       ( state.lastSyncedScrollPos == Nothing
                                        ) -- updateStateOnly ?
                                   )
                                |> Task.onError
                                   (always <| Task.succeed NoOp)
 
+                           posChanged
+                               = state.lastSyncedScrollPos
+                                 /= (Just newRealViewportPosVal)
+
+                           needToSyncLastScroll
+                               = posChanged
+
                        in
                            ( { state |
                                virtualControlPos
                                    = newVirtualControlPos
+                             , lastViewportChannel
+                                   = if xor posChanged isVirtualControlOnSameChannel
+                                     then
+                                         state.lastViewportChannel
+                                            |> toggleControlChannel
+                                     else
+                                         state.lastViewportChannel
                              }
-                           , ( case ( state.lastSyncedScrollPos
-                                          == (Just newRealViewportPosVal)
-                                    --        ^ not `lastRealViewportPosVal`
-                                    -- Animation doesn't touch the
-                                    -- lastSyncedScrollPos.
-                                    -- so this value is last position
-                                    -- synced between "real" position
-                                    -- and the position which
-                                    -- virtualControlPos have known
-                                    -- it is there so far.
 
-                                    , newVirtualControlPos
-                                           |> Virtual.getMaybeWarpInfo
-                                    )
+                           , ( case  newVirtualControlPos
+                                         |> Virtual.getMaybeWarpInfo
                                of
-                                   -- note: now this is a regular picker
-                                   --       without circular rotating.
-                                   -- when viewport position is not really
-                                   -- changed, skip the `SyncLastScroll` totally
-                                   ( isSameViewportPos, Just warpInfo ) ->
-                                       SetViewport
-                                       (SelectViewport ForControl)
-                                       ( warpInfo.to
-                                            |> Tuple.second
-                                            |> Virtual.fromViewportPos
-                                            |> toMilliPixel
-                                       )
-                                       |> Task.succeed
-                                       |> List.singleton
-                                       |> if isSameViewportPos then
-                                              identity
-                                          else
-                                              \ls -> taskSyncLastScroll :: ls
+                                   Just warpInfo ->
+                                         SetViewport
+                                         (SelectViewport ForControl)
+                                         ( warpInfo.to
+                                              |> Tuple.second
+                                              |> Virtual.fromViewportPos
+                                              |> toMilliPixel
+                                         )
+                                         |> Task.succeed
+                                         |> List.singleton
 
-                                   ( False, Nothing ) ->
-                                       [ taskSyncLastScroll ]
-
-                                   ( True, Nothing ) ->
+                                   _ ->
                                        []
                              )
+                             -- note: now this is a regular picker
+                             --       without circular rotating.
+                             -- when viewport position is not really
+                             -- changed, skip the `SyncLastScroll` totally
+                             |> ( if needToSyncLastScroll then
+                                      \ls -> taskSyncLastScroll :: ls
+                                  else
+                                      identity
+                                )
+
                              |> List.map
                                 (Task.perform messageMap)
                              |> Cmd.batch
                            )
-                           -- FIXME : if Cmd structure is simple; change
-                           --         to Cmd.non, Task.perform
+
 
            SyncLastScroll clock destRealViewportPosVal updateStateOnly ->
                -- sync from `ForControl` -> `ForView`
@@ -2551,12 +2596,18 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                      state
 
                , Task.map3
-                   (\now (currViewPos, _) controlPos ->
-                        SyncVirtualControlPos
-                        now currViewPos controlPos
+                   (\now viewVp controlVp ->
+                        let
+                            viewVp1
+                                = (state.lastSyncedScrollPos |> Debug.log "lastSynced")
+                                |> Maybe.withDefault
+                                   (viewVp |> Debug.log "newVal")
+                        in
+                            SyncVirtualControlPos
+                            now viewVp1 controlVp
                    )
                    Time.now
-                   taskGetViewViewportPosAndSceneLength
+                   taskGetViewViewportPos
                    taskGetControlViewportPos
 
                  |> Task.onError
