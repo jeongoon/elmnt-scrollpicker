@@ -56,6 +56,9 @@ t     t  |        |
 v        |        |
 -------- +--------+
 
+note: however normally viewport is not a point but has length(height)
+exact calculation can be seen in `adjustViewportPos`
+
 -}
 
 import Time
@@ -347,21 +350,23 @@ adjustViewportPos ((Settings { virtualPageLength,
           ( adjustPageAmount, vposVal1 )
               = if vposValLower <= wormInMargin then
                     {- vposVal1 = pageLength + wormInMargin
-                                 - (wormInMargin - vposVal)
+                                  - wormOutPadding
+                                  - (wormInMargin - vposValLower)
+                                  - lastViewportLength
                        therefore ...
                     -}
                     ( -1 -- go previous page
-                    , vposValLower + pageLength
-                        - lastViewportLength -- XXX : give enough padding
+                    , vposValLower + pageLength - wormOutPadding
+                        - lastViewportLength
                     )
                 else
                     if vposValHigher >= higherWormInMarginAbs then
                         {- vposVal1 = wormInMargin + wormOutPadding
-                                   + (vposVal - higherWormInMarginAbs))
+                                   +  (vposValHigher - higherWormInMarginAbs)
                            therefore ...
                         -}
                         ( 1
-                        , vposValLower + wormOutPadding - pageLength
+                        , vposValHigher + wormOutPadding - pageLength
                         )
                     else
                         ( 0, vposValLower )
@@ -400,8 +405,8 @@ popMaybeWarpInfo (Pos posRec)
       )
 
 {-| must be not exported -}
-okPos : PosRecord compatibleSanity -> Pos SanityOk compatibleSanity
-okPos
+sanitizePos : PosRecord compatibleSanity -> Pos SanityOk compatibleSanity
+sanitizePos
     = Pos
 
 {-|
@@ -486,7 +491,7 @@ setPosHelper ((Settings { virtualPageLength, wormInMargin })
               = initPageNum |> fromPageNum
 
           ( adjustPageNumVal,
-           ((ViewportPos syncedViewportPosVal)
+            ((ViewportPos syncedViewportPosVal)
                 as syncedViewportPos) ) =
               newViewportPos
                   |> adjustViewportPos settings state
@@ -513,12 +518,14 @@ setPosHelper ((Settings { virtualPageLength, wormInMargin })
 
           syncedLastViewportOffset
               = case ( mbViewportOffset
-                     , adjustPageNumVal /= 0 ) of
-                    ( Just viewportOffset, False ) ->
+                     , adjustPageNumVal == 0 ) of
+                    ( Just viewportOffset, True ) ->
                         viewportOffset
+                            |> Debug.log "keep orig"
                     _ ->
-                        -- ( Just viewportOffset, True )
+                        -- ( Just viewportOffset, False )
                         (restRealViewPortPosVal - virtualViewportPosVal)
+                            |> Debug.log "reset"
 
           mbLastWarpInfo
               = if adjustPageNumVal == 0 then
@@ -593,7 +600,7 @@ updatePosAndRealViewportPos
                   )
 
         isObsolete
-            = lastPosRec.lastClockTime + scrollStopCheckTime
+            = lastPosRec.lastClockTime + 125 -- 125 ms
               < newScrollClockTime
 
    in
@@ -606,14 +613,18 @@ updatePosAndRealViewportPos
                                  -- keep going bellow the scene
                                  -- : keep hitting the back
                                  ( state
-                                 , lastPosRec.lastViewportOffset
-                                    - relativePos
-                                    |> Just
-
+                                 , if isObsolete then
+                                       Nothing
+                                   else
+                                       lastPosRec.lastViewportOffset
+                                           - relativePos
+                                         |> Just
                                  )
                              else
                                  -- stop hitting the front (decreasing in position)
                                  -- and go backward (increase in position)
+                                 -- : no need to change anything if
+                                 --   user sync properly
                                  ( state
                                  , Nothing
                                  )
@@ -634,19 +645,21 @@ updatePosAndRealViewportPos
                                      -- stop hitting the back
                                      -- (increasing in position)
                                      -- and go forward (decrease in position)
+                                     -- : no need to change anything if
+                                     --   user sync properly
                                      ( state
                                      , Nothing                               
                                      )
 
                              else -- on the Scene
-                                 if isObsolete then
-                                     ( { state |
+                                 if isObsolete  then
+                                     ( state{-{ state |
                                          lastViewportPos
                                              = state.lastViewportPos
                                                + relativePos
-                                             |> Debug.log "test"
-                                       }
+                                       }-}
                                      , Nothing
+                                         |> Debug.log "onScene and obsolete"
                                      )
 
                                  else -- keep continue scrolling as normal
@@ -667,15 +680,18 @@ updatePosAndRealViewportPos
                                  }
                               |> Pos
 
+
                       Nothing ->
                           newPosInfo
                               |> initPos settings state1
 
 
        in
-           ( newPos,    newPosRec
-                           |> okPos
-                           |> toRealViewportPosVal settings state
+           ( newPos
+                |> (\x -> Debug.log (calcRealViewportPos settings x |> String.fromFloat) x)
+           , newPosRec
+                |> sanitizePos
+                |> toRealViewportPosVal settings state
            )
 
 {-

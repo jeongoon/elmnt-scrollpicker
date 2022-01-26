@@ -1753,8 +1753,8 @@ updateWith { messageMapWith, pickerDirection } _ msg state
                )
 
            OnKey keyCodeString -> -- not used yet.
-               let _ = Debug.log "key code:"
-               in
+--               let _ = Debug.log "key code:"
+--               in
                    ( state, Cmd.none )
 
            SyncLastScroll clock keepAnimation ->
@@ -2073,8 +2073,8 @@ updateWith { messageMapWith, pickerDirection } _ msg state
                )
 
            ScrollPickerFailure context detailString detailError ->
-               let _ = Debug.log context detailString
-               in
+--               let _ = Debug.log context detailString
+--               in
                    -- handle error or log here
                    ( state
                    , Cmd.none

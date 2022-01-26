@@ -413,7 +413,7 @@ type Msg optExtra vt msg
     = InitViewportsMsg          InitViewportsChain
     | OnScroll
     | SyncControlChannel        Time.Posix
-    | SyncVirtualControlPos     Time.Posix Float Float
+    | SyncVirtualControlPos     Time.Posix Float Float Bool
     | SyncLastScroll            Time.Posix Float Bool
 -- ^ sync and initialising
     | OnKey                     String
@@ -710,7 +710,7 @@ when make Float -> Int pixel value, `trucate` is normally working good
  enough for FF, Chrome, Webkit.
  -}
 cut_ : Float -> Int
-cut_ 
+cut_
     = truncate
 
 {-| not exported
@@ -1736,7 +1736,10 @@ viewAsElementHelper { messageMapWith, pickerDirection }
 
               , el [ fill |> widthSetter
                    , Background.color <| rgb255 0 0 0
-                   , MAttr.style "opacity" "0.0"
+                   , MAttr.style "opacity" "0.5"
+--                   , MAttr.style "opacity" "0.0005"
+                       -- XXX: hot fix for chrome, vivaldi
+                       -- div doesn't take pointer events when opacity is zero
                    ] <| viewPickerHelper ForControl
               ]
 
@@ -2159,11 +2162,12 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                in
                    ( state1
                      -- this involves virtual viewport change as well
-                   , Task.map3
+                   , Task.map4
                          SyncVirtualControlPos
                          Time.now
                          (Task.succeed realViewportPos)
                          taskGetControlViewportPos
+                         (Task.succeed False)
                      |> Task.onError
                         (always <| Task.succeed NoOp)
                      |> Task.perform messageMap
@@ -2175,11 +2179,12 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                ( state
                , [ ( case state.optionLengthInfoStatus of
                          OptionLengthUpdated ->
-                             Task.map3
+                             Task.map4
                              SyncVirtualControlPos
                              Time.now
                              taskGetViewViewportPos
                              taskGetControlViewportPos
+                             (Task.succeed False)
                              |> Task.onError
                                     (always <| Task.succeed NoOp)
 
@@ -2198,6 +2203,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                  |> List.map
                     (Task.perform messageMap)
                  |> Cmd.batch
+                 |> Debug.log "onScroll"
                )
 
            SyncControlChannel now ->
@@ -2205,7 +2211,6 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                          |> Virtual.getLastClockTime
                          |> \n -> n + state.scrollStopCheckTime )
                         <= Time.posixToMillis now
-                     && (not <| isVirtualControlOnSameChannel)
                   )
                then
                    ( { state |
@@ -2219,13 +2224,14 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                    ( state, Cmd.none )
 
            OnKey keyCodeString -> -- not used yet.
-               let _ = Debug.log "key code:"
-               in
+--               let _ = Debug.log "key code:"
+--               in
                    ( state, Cmd.none )
 
            SyncVirtualControlPos clock
                                  currRealViewportPosVal
-                                 newControlViewportPosVal ->
+                                 newControlViewportPosVal
+                                 keepChannel ->
                {- main idea:
 
                     [  Virtual "Viewport" Pos ]
@@ -2288,7 +2294,7 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                            posChanged
                                = state.lastSyncedScrollPos
                                  /= (Just newRealViewportPosVal)
-
+                                 
                            needToSyncLastScroll
                                = posChanged
 
@@ -2297,12 +2303,16 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                                virtualControlPos
                                    = newVirtualControlPos
                              , lastViewportChannel
-                                   = if xor posChanged isVirtualControlOnSameChannel
-                                     then
+                                   = if keepChannel then
                                          state.lastViewportChannel
-                                            |> toggleControlChannel
                                      else
-                                         state.lastViewportChannel
+                                         if posChanged then
+                                             state.virtualControlChannel
+
+                                         else
+                                             state.virtualControlChannel
+                                                |> toggleControlChannel
+
                              }
 
                            , ( case  newVirtualControlPos
@@ -2430,7 +2440,8 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
            FindCenterOptionWith frameElCenterPos
                                 frameVpStartPos frameVpCenterPos
                                 onSuccess ->
-               if state |> isPickerControlReady then
+
+                                    if state |> isPickerControlReady then
                    let
                        findCenterOptionWorker : Float -> List Float ->
                                                 List String ->
@@ -2599,12 +2610,12 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
                    (\now viewVp controlVp ->
                         let
                             viewVp1
-                                = (state.lastSyncedScrollPos |> Debug.log "lastSynced")
+                                = state.lastSyncedScrollPos
                                 |> Maybe.withDefault
-                                   (viewVp |> Debug.log "newVal")
+                                   viewVp
                         in
                             SyncVirtualControlPos
-                            now viewVp1 controlVp
+                            now viewVp controlVp True
                    )
                    Time.now
                    taskGetViewViewportPos
@@ -2616,8 +2627,8 @@ updateWith ({ messageMapWith, pickerDirection } as appModel)
               )
 
            ScrollPickerFailure context detailString detailError ->
-               let _ = Debug.log context detailString
-               in
+--               let _ = Debug.log context detailString
+--               in
                    -- handle error or log here
                    ( state
                    , Cmd.none
