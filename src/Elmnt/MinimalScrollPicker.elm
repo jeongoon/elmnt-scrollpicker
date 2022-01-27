@@ -725,38 +725,6 @@ defaultBaseSettingsWith theme pickerDirection
        fontSize shadeLength paddingLength borderWidth pickerLength pickerWidth
 
 
-{-
-{-| property name used for Animation which will be sent to
-"Browser.Dom.setViewportOf' eventually
--}
-scrollPosPropertyName : String
-scrollPosPropertyName = "spos"
-
-{-| Function to make actuall property for scroll animation
--}
-scrollPosProperty : Float -> Animation.Property
-scrollPosProperty spos
-    = Animation.custom scrollPosPropertyName  spos ""
-
-{-| scroll position consts of one dimension, if initPseudoAnimStateHelper is
-given with property function, it will initialise Animation
--}
-initPseudoAnimStateHelper : (a -> Animation.Property) ->
-                            a ->
-                            Animation.Messenger.State msg
-initPseudoAnimStateHelper propertyFn val
-    = Animation.style
-      [ propertyFn val ]
-
-
-{-| combine scrollPosProperty function and initPseudoAnimStateHelper
-to get simpler setter for animation scroll property
--}
-initPseudoAnimState : Float ->
-                      Animation.Messenger.State msg
-initPseudoAnimState
-    = initPseudoAnimStateHelper scrollPosProperty
--}
 
 {-| Helper type aliasing for changing some state -}
 type alias StateUpdater extraStat extraOpt vt msg
@@ -764,7 +732,11 @@ type alias StateUpdater extraStat extraOpt vt msg
       MinimalStateLike extraStat extraOpt vt msg
 
 
-{-| animator test -}
+{-| animator for animation
+
+please read more here [`Wiring up the animation`](/packages/mdgriffith/elm-animator/1.1.1/Animator#wiring-up-the-animation)
+
+-}
 animator : Animator.Animator (MinimalStateLike extraStat extraOpt vt msg)
 animator
     = Animator.animator
@@ -1699,16 +1671,6 @@ updateWith { messageMapWith, pickerDirection } _ msg state
         messageMap
             = messageMapWith state.idString
 
-        {-
-        getMaybeAnimProperty animState propName
-            -- `elm-style-animation' doesn't seem to supply the low level
-            -- accessor and pseudoAnimState has only one member so...
-            -- otherwise we need to use Dict.fromList |> Dict.get ...
-            = Animation.renderPairs animState
-            |> Dict.fromList
-            |> Dict.get propName
-        -}
-
         ( posAccessor, lengthAccessor )
             = case pickerDirection of
                   Horizontal ->
@@ -2144,94 +2106,7 @@ updateWith { messageMapWith, pickerDirection } _ msg state
                    , Cmd.none
                    )
 
-           {-
-           Animate animMsg ->
-               let
-                   ( newAnimState, animCmd )
-                       = Animation.Messenger.update
-                         animMsg
-                         state.pseudoAnimState
 
-                   mbNewViewportPos
-                       = if state |> isSnapping then
-                             getMaybeAnimProperty
-                             newAnimState scrollPosPropertyName
-                                 |> Maybe.andThen String.toFloat
-                         else
-                             Nothing
-
-               in
-                   case mbNewViewportPos of
-                       Just newViewportPos ->
-                           let newViewportPosMP
-                                   = newViewportPos
-                                   |> toMilliPixel
-
-                               scrollTraceMP
-                                   = state.scrollTraceMP
-                                   |> Set.insert newViewportPosMP
-
-                           in
-                               ( { state |
-                                   pseudoAnimState
-                                       = newAnimState
-                                 , scrollTraceMP
-                                     = scrollTraceMP
-                                     -- this value is not quite synchronize
-                                     -- with 'OnScroll' Msg which catches the
-                                     -- event later than one or two Animation
-                                     -- happened already.
-                                     -- So we will follow the trace of Animation
-                                     -- position to check any 'scroll' events
-                                     -- made from the this module in the end.
-                                 }
-
-                               , Cmd.batch
-                                 [ ( if (state.finalTargetScrollPosMP
-                                            |> isInScrollTraceHelper
-                                            |> List.filter ((==) 0)
-                                            |> List.length            ) > 1 then
-                                         --^ found the same position more than
-                                         --  once which probably mean
-                                     --  the viewport already at the destination
-                                         case state.targetIdString
-                                                |> Maybe.andThen
-                                                   ((Util.flip Dict.get)
-                                                    state.optionIdToItemDict)
-                                         of
-                                             Just (OptionItem targetOption) ->
-                                                 Task.succeed <|
-                                                     ScrollPickerSuccess
-                                                     targetOption
-
-                                             _ ->
-                                                 Task.fail <|
-                                                     InvalidOptionId
-                                                     state.targetIdString
-                                     else
-                                         Task.succeed <|
-                                             SetViewport
-                                             newViewportPosMP
-                                   )
-                                   |> Task.attempt
-                                      (\res ->
-                                           case res of
-                                               Ok internalMsg ->
-                                                   messageMap internalMsg
-                                               _ ->
-                                                   messageMap NoOp)
-
-                                 , animCmd
-                                 ]
-                               )
-                       _ ->
-                           ( { state |
-                               pseudoAnimState
-                                   = newAnimState
-                             }
-                           , animCmd
-                           )
-          -}
            Animate clock ->
                let
                    currScrollPosMP
