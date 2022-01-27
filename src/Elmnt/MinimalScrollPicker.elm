@@ -42,13 +42,14 @@ module Elmnt.MinimalScrollPicker
                  , hasCenterOption
                  , setCenterOption
                  , resetCenterOption
-                 , initPseudoAnimStateHelper
-                 , initPseudoAnimState
+                 --, initPseudoAnimStateHelper
+                 --, initPseudoAnimState
                  --, defaultShadeLengthWith
+                 , animator
                  , defaultShadeAttrsWith
                  , defaultBaseSettingsWith
-                 , scrollPosPropertyName
-                 , scrollPosProperty
+                 --, scrollPosPropertyName
+                 --, scrollPosProperty
                  , getOptionsWrapped
                  , Geom
                  , TwoDim
@@ -105,8 +106,7 @@ anyNewOptionSelected,  initCmdWith
 @docs MinimalStateLike, MinimalOptionLike, MinimalPaletteLike,
 MinimalPaletteOnLike, getOptionsWrapped,
 isSnapping, stopSnapping, hasCenterOption, setCenterOption, resetCenterOption,
-unsafeSetScrollCheckTime, scrollPosProperty, scrollPosPropertyName,
-initPseudoAnimState, initPseudoAnimStateHelper,
+unsafeSetScrollCheckTime,
 defaultShadeAttrsWith, defaultBaseSettingsWith, Geom, getCenterPosAndLengthOfHelper,
 taskGetViewport, 
 toMilliPixel, fromMilliPixel, subscriptionsWithHelper
@@ -148,8 +148,9 @@ import Browser
 import Browser.Dom
 import Browser.Events
 
-import Animation
-import Animation.Messenger
+--import Animation
+--import Animation.Messenger
+import Animator
 
 -- -- -- Internal modules and helpers -- -- --
 
@@ -224,6 +225,12 @@ please, use [`asOptionSubId`](#asOptionSubId) to wrap a string.
 type OptionSubId
     = OptionSubId String
 
+{-| not exported
+-}
+type alias MessageMapper extraOpt vt msg
+    = String -> (Msg extraOpt vt msg) -> msg
+
+
 {-| Generally used when you [`setOptions`](#setOptions)
 -}
 asOptionSubId : String -> OptionSubId
@@ -276,26 +283,49 @@ makeTwoDim a b
           , endPoint   = a
           }
 
+{-| not exported
+-}
 type alias OnSuccessFunction extraOpt vt msg
     = String -> Float -> Float -> Float ->
       Msg extraOpt vt msg
+
+{-| FIXME: export
+-}
+type SnapState
+    = SnapIdle
+    | Snapping
+    | SnapFinished
 
 -- -- -- MODEL -- -- --
 
 {-| Provide Minimal model (or state) to work with. most of funciton in
 this module works well with your own record type generally, as
-I used more generic type constraint in function definition
+more generic type constraint in function definition like:
 
-    ..
-    , pseudoAnimState : Animation.Messenger.State msg
-    ..
+```elm
+isSnapping : MinimalStateLike extraStat extraOption vt msg ->
+             Bool
 
-**Note:** elm-style-animation module doesn't supply low-level functions
-to get intermediate states of animation so I need more research
-but now I'm using renderPairs function to get the states of current
-values in 'String' format which will be traslated into number.
-Even though one state value is used, I need to use Animation.style function
-to generate the state which can contain a lot more information
+isSnapping state
+    = case state.targetIdString of
+          Just _ ->
+              True
+          _ ->
+              False
+```
+
+As `MinimalStateLike` used, you can still use your own extended model.
+for example to use `getOptions` function with your own model looks like ...
+
+```elm
+type alias YourModel vt msg = MinimalStateLike { extraField1 : String  } vt msg
+
+yourModel
+   = yourInitFunction
+
+storedOptions
+    = yourModel |> getOptions
+```
 
 -}
 type alias MinimalState extraOpt vt msg
@@ -304,23 +334,20 @@ type alias MinimalState extraOpt vt msg
 
 
 {-| Used for internal type checking -}
-type alias MinimalStateLike extraStat extraOpt vt msg
-    = { extraStat |
+type alias MinimalStateLike stateWith extraOpt vt msg
+    = { stateWith |
         idString                : String
       , optionIds               : List String
       , optionIdToItemDict      : Dict String (OptionItem extraOpt vt msg)
       , targetIdString          : Maybe String
-      , pseudoAnimState         : Animation.Messenger.State msg
-      -- ^ elm-style-animation doesn't support low-level functions
-      --   so we need to make a pseudo `style' record
-
       , lastScrollClock         : Time.Posix
+      , snapState               : Animator.Timeline SnapState
       , scrollTraceMP           : Set Int
       -- a trace of current animation set
       -- used for checking 'scroll' events coming from the module or user
       -- **Note:** Set is used because one direction Animation is in use.
-
-      , finalTargetScrollPosMP  : Int           -- MP : Milli Pixels
+      , initTargetScrollPos     : Float
+      , finalTargetScrollPos    : Float
       , scrollStopCheckTime     : Int
       , optionIdInTheCenter     : Maybe String
       , frameCenterPos          : Float
@@ -391,7 +418,8 @@ type Msg extraOpt vt msg
     | GotoTargetOption          String
     | ScrollPickerSuccess       (MinimalOptionLike extraOpt vt msg)
     | ScrollPickerFailure       String String Error
-    | Animate                   Animation.Msg
+--    | Animate                   Animation.Msg
+    | Animate                   Time.Posix
     | SetViewport               Int
     | NoOp
 
@@ -697,6 +725,7 @@ defaultBaseSettingsWith theme pickerDirection
        fontSize shadeLength paddingLength borderWidth pickerLength pickerWidth
 
 
+{-
 {-| property name used for Animation which will be sent to
 "Browser.Dom.setViewportOf' eventually
 -}
@@ -727,12 +756,30 @@ initPseudoAnimState : Float ->
                       Animation.Messenger.State msg
 initPseudoAnimState
     = initPseudoAnimStateHelper scrollPosProperty
-
+-}
 
 {-| Helper type aliasing for changing some state -}
 type alias StateUpdater extraStat extraOpt vt msg
     = MinimalStateLike extraStat extraOpt vt msg ->
       MinimalStateLike extraStat extraOpt vt msg
+
+
+{-| animator test -}
+animator : Animator.Animator (MinimalStateLike extraStat extraOpt vt msg)
+animator
+    = Animator.animator
+    |> Animator.watchingWith
+       .snapState
+       (\newSnapState state ->
+            { state |
+              snapState
+                  = newSnapState
+            }
+       )
+       (\snapState ->
+            snapState == Snapping
+       )
+            
 
 -- -- -- Helper functions for user -- -- --
 
@@ -930,7 +977,7 @@ anyNewOptionSelected msg
 minimal testing function if the picker is snapping to some item
 at the moment
 -}
-isSnapping : MinimalStateLike extraStat extraOptino vt msg ->
+isSnapping : MinimalStateLike extraStat extraOption vt msg ->
              Bool
 
 isSnapping state
@@ -956,12 +1003,15 @@ stopSnapping state
     = { state |
         targetIdString
             = Nothing
-      , finalTargetScrollPosMP
-            = -1
+      , snapState
+            = state.snapState
+            |> Animator.go Animator.immediately SnapIdle
       , scrollTraceMP
             = Set.empty
-      , pseudoAnimState =
-          initPseudoAnimState 0
+--      , initTargetScrollPosMP
+--            = -1
+--      , finalTargetScrollPosMP
+--            = -1
       }
 
 {-| check if we already know which item is is near to the center
@@ -1295,13 +1345,12 @@ in
 -}
 alwaysGotoOptionWithIdHelper
     : { appModelWith |
-        messageMapWith : (String ->
-                              (Msg optExtra vt msg) -> msg)
+        messageMapWith : MessageMapper extraOpt vt msg
       , pickerDirection : Direction
       } ->
       String ->
       Maybe (Error -> msg) ->
-      MinimalStateLike statExtra optExtra vt msg ->
+      MinimalStateLike statExtra extraOpt vt msg ->
       Task Never msg
 
 alwaysGotoOptionWithIdHelper appModel optionIdString mbErrorHandler state
@@ -1374,16 +1423,22 @@ initMinimalState idString
             = Dict.empty
       , targetIdString
             = Nothing
+      {-
       , pseudoAnimState
             = initPseudoAnimState 0
                 -- ^ this is not actual Html Style elements
                 --   just for storing some animation status
                 --   `pos' is used for `Browser.Dom.setViewportOf'
+       -}
       , lastScrollClock
-            = Time.millisToPosix 0
+          = Time.millisToPosix 0
+      , snapState
+            = Animator.init SnapIdle
       , scrollTraceMP
             = Set.empty
-      , finalTargetScrollPosMP
+      , initTargetScrollPos
+            = -1
+      , finalTargetScrollPos
             = -1
       , scrollStopCheckTime
             = 250 -- 250 ms
@@ -1405,11 +1460,11 @@ yourPickerState
 ```
 -}
 initCmdWith : { appModelWith |
-                messageMapWith : (String -> (Msg optExtra vt msg) -> msg)
+                messageMapWith : MessageMapper extraOpt vt msg
               , pickerDirection : Direction
               } ->
               OptionSubId ->
-              (MinimalStateLike statExtra optExtra vt msg) ->
+              (MinimalStateLike statExtra extraOpt vt msg) ->
               Cmd msg
 initCmdWith ({ messageMapWith } as appModel) optionSubId state
     = [ state
@@ -1436,7 +1491,7 @@ even if you are using your own color accessor(function) with your theme.
 -}
 viewAsElement
     : { appModel |
-        messageMapWith : (String -> (Msg extraOpt vt msg) -> msg)
+        messageMapWith : MessageMapper extraOpt vt msg
       , pickerDirection : Direction
       } ->
       ( BaseThemeLike extraTheme (MinimalPaletteLike pal
@@ -1465,7 +1520,7 @@ so `viewAsElementHelper` will use default method to create them.
 -}
 viewAsElementHelper
     : { appModel |
-        messageMapWith : (String -> (Msg extraOpt vt msg) -> msg)
+        messageMapWith : MessageMapper extraOpt vt msg
       , pickerDirection : Direction
       } ->
       ( BaseThemeLike extraTheme
@@ -1626,7 +1681,7 @@ described in the [`Msg`](#Msg) of the module.
 
 -}
 updateWith : { appModel |
-               messageMapWith : (String -> (Msg extraOpt vt msg) -> msg)
+               messageMapWith : MessageMapper extraOpt vt msg
              , pickerDirection : Direction
              } ->
              (BaseThemeLike extraTheme
@@ -1644,6 +1699,7 @@ updateWith { messageMapWith, pickerDirection } _ msg state
         messageMap
             = messageMapWith state.idString
 
+        {-
         getMaybeAnimProperty animState propName
             -- `elm-style-animation' doesn't seem to supply the low level
             -- accessor and pseudoAnimState has only one member so...
@@ -1651,6 +1707,7 @@ updateWith { messageMapWith, pickerDirection } _ msg state
             = Animation.renderPairs animState
             |> Dict.fromList
             |> Dict.get propName
+        -}
 
         ( posAccessor, lengthAccessor )
             = case pickerDirection of
@@ -1684,7 +1741,7 @@ updateWith { messageMapWith, pickerDirection } _ msg state
                ) |> Task.mapError DomError
 
         isInScrollTraceHelper mp
-            = {-(Debug.log "scroll trace:"-} state.scrollTraceMP{-)-}
+            = state.scrollTraceMP
             |> Set.toList
             |> List.map
                -- ^ make distance list
@@ -1726,8 +1783,9 @@ updateWith { messageMapWith, pickerDirection } _ msg state
                                    if vpPosMP |> isInScrollTrace then
                                        -- event from module => ignore
                                        Task.succeed True
-                                   -- still animating ^
-                                   else
+                                    -- still animating ^
+ 
+                                  else
                                        Task.succeed False
                                                  -- ^ do not keep animation
                            ) --^ result in 'keepAnimation'
@@ -2012,31 +2070,37 @@ updateWith { messageMapWith, pickerDirection } _ msg state
                -- startPos is current viewport position
                -- relPos is relative amount of position to change
 
-               let targetScrollPos
+               let
+                   initTargetScrollPos
+                       = startPos
+                       |> cleanScrollPos
+
+                   finalTargetScrollPos
                        = startPos + relPos
                        |> cleanScrollPos
+
                in
                    -- set animation
                    ( { state |
                        targetIdString
                            = Just idString
 
-                     , finalTargetScrollPosMP
-                           = targetScrollPos
-                           |> toMilliPixel
+                     , initTargetScrollPos
+                           = initTargetScrollPos
 
-                     , pseudoAnimState
-                           = initPseudoAnimState startPos
-                           |> Animation.interrupt
-                              [ Animation.to
-                                    [  scrollPosProperty <| targetScrollPos
-                                    ]
-                              -- XXX how about animation duration ???
-                              -- Change Animation.to -> Animation.toWith
-                              -- or when making style using styleWith instead
-                              ]
+                     , finalTargetScrollPos
+                           = finalTargetScrollPos
+
+                     , snapState
+                           = Animator.init Snapping
+                           |> ( if state.finalTargetScrollPos < 0 then
+                                    Animator.go
+                                    (750 |> Animator.millis) SnapFinished
+                                else
+                                    Animator.go
+                                    Animator.slowly SnapFinished
+                              )
                      }
-
                    , Cmd.none
                    )
 
@@ -2080,6 +2144,7 @@ updateWith { messageMapWith, pickerDirection } _ msg state
                    , Cmd.none
                    )
 
+           {-
            Animate animMsg ->
                let
                    ( newAnimState, animCmd )
@@ -2166,14 +2231,91 @@ updateWith { messageMapWith, pickerDirection } _ msg state
                              }
                            , animCmd
                            )
+          -}
+           Animate clock ->
+               let
+                   currScrollPosMP
+                       = Animator.move state.snapState
+                         (\snapSt ->
+                              ( if snapSt == Snapping then
+                                    state.initTargetScrollPos
+                                      |> Animator.at
+                                      |> Animator.leaveSmoothly 0
 
+                                else
+                                    state.finalTargetScrollPos
+                                      |> Animator.at
+                                      |> Animator.arriveEarly 0.1
+                                      |> Animator.arriveSmoothly 0.8
+
+                              )
+                         )
+                       |> toMilliPixel
+                         
+                   taskFinishEarlyOrKeepAnimating
+                       = if (state.finalTargetScrollPos
+                               |> toMilliPixel
+                               |> isInScrollTraceHelper
+                               |> List.filter ((==) 0)
+                               |> List.length            ) > 1
+
+                         then
+                             case state.targetIdString
+                                    |> Maybe.andThen
+                                       (\id ->
+                                            state.optionIdToItemDict
+                                                |> Dict.get id
+                                       )
+                             of
+                                 Just (OptionItem targetOption) ->
+                                     Task.succeed <|
+                                         ScrollPickerSuccess
+                                         targetOption
+                                 _ ->
+                                     Task.fail <|
+                                         InvalidOptionId
+                                         state.targetIdString
+                         else
+                             if ( state.snapState
+                                    |> Animator.current ) /= SnapIdle then
+                                 Task.succeed <|
+                                     SetViewport
+                                     currScrollPosMP
+                             else
+                                 Task.succeed NoOp
+
+              in
+                   ( let state1
+                             = state
+                             |> Animator.update clock animator
+                            
+                     in
+                         { state1 |
+                           scrollTraceMP
+                               = state1.scrollTraceMP
+                               |> Set.insert currScrollPosMP
+                         }
+
+                   , taskFinishEarlyOrKeepAnimating
+                       |> Task.attempt
+                          (\res ->
+                               case res of
+                                   Ok targetMsg ->
+                                       messageMap targetMsg
+ 
+                                   _ ->
+                                       messageMap NoOp -- XXX: no report
+                          )
+                   )
+                              
+                    
            -- the Msg where acutally move the viewport
            SetViewport scrollPosMP -> -- MP : in Milli Pixel
                ( state
                , taskSetViewport state.idString
-                   (scrollPosMP |> fromMilliPixel)
-                        |> Task.attempt
-                           (always <| messageMap NoOp)
+                 (scrollPosMP |> fromMilliPixel)
+                   |> Task.attempt
+                      (always <| messageMap NoOp)
                )
 
            NoOp ->
@@ -2192,20 +2334,17 @@ subscriptionsWith pickerStates model
             model.messageMapWith idString << Animate)
 ```
 -}
-subscriptionsWithHelper : (String -> Animation.Msg -> msg) ->
-                          List { a |
-                                 idString        : String
-                               , pseudoAnimState : Animation.Messenger.State msg
-                               } ->
+subscriptionsWithHelper : (String -> (Time.Posix -> msg)) ->
+                          List (MinimalStateLike extraStat extraOpt vt msg) ->
                           Sub msg
 
-subscriptionsWithHelper animMessageMapWith pickerStates
+subscriptionsWithHelper animMessageWithId pickerStates
     = pickerStates
     |> List.map
-       (\{idString, pseudoAnimState} ->
-            Animation.subscription
-            (animMessageMapWith idString)
-            [ pseudoAnimState ]
+       (\({idString} as pickerState) ->
+            animator
+               |> Animator.toSubscription
+                  (animMessageWithId idString) pickerState
        )
     |> Sub.batch
 
@@ -2217,7 +2356,7 @@ subscription (Sub msg).
 -}
 subscriptionsWith : List (MinimalStateLike extraStat extraOpt vt msg) ->
                     { model |
-                      messageMapWith : (String -> (Msg extraOpt vt msg) -> msg)
+                      messageMapWith : MessageMapper extraOpt vt msg
                     } ->
                     Sub msg
 
