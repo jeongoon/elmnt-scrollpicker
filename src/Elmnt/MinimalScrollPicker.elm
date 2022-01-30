@@ -36,6 +36,7 @@ module Elmnt.MinimalScrollPicker
                  , taskTriggerGetCenterOptionHelper
 
                  -- v  low-level api
+                 , MessageMapper
                  , unwrapOption
                  , isSnapping
                  , stopSnapping
@@ -59,21 +60,24 @@ module Elmnt.MinimalScrollPicker
               )
 
 
-{-| This module is an implementation of picker by scrolling and basic view type is [`elm-ui`][elm-ui].
-and animation can be done a bit tricky but easily thanks to [`elm-style-animation`][elm-style-animation].
-Due to some non-standard way to hiding scrollbar, [`elm-css`][elm-css] is also required.
+{-| This module provides a picker by scrolling. Swiping also working on touch-device.
 
-**Note:** Type annotation is probably too long to see. However, it might be useful if you
-want add some feature with your own picker model.
+This is a *real* scrolling picker and get dom data from [`Elm.Browser.Dom`](/packages/elm/browser/latest/Browser-Dom).
+and if you don't need extra feature. This is the one you can start with.
+
+Animation is done by [`elm-animator`][elm-animator] latest version of animator is [here][elm-animator-latest].
+
+Due to some non-standard way to hiding scrollbar, [`elm-css`][elm-css] is also required.
 
 [elm-ui]: /packages/mdgriffith/elm-ui/latest
 [elm-css]: /packages/rtfeldman/elm-css/latest
-[elm-style-animation]: /packages/mdgriffith/elm-style-animation/latest
+[elm-animator]: /packages/mdgriffith/mdgriffith/elm-animator/1.1.1
+[elm-animator-latest]: /packages/mdgriffith/mdgriffith/elm-animator/latest
 [example]: https://github.com/jeongoon/elmnt-scrollpicker/tree/3.0.0/examples/ClockTeller.elm
 
 # Type
 
-@docs MinimalState, MinimalOption, OptionItem, Direction, StartEnd, Msg, Error
+@docs MinimalState, MinimalOption, OptionItem, Direction, StartEnd, Msg, Error, MessageMapper
 
 # State(picker model) Creation, Modification and Query
 
@@ -90,21 +94,23 @@ anyNewOptionSelected,  initCmdWith
 
 # View
 
-@docs viewAsElement, defaultTheme, BaseTheme, BaseSettings
+@docs viewAsElement, defaultTheme, BaseThemeLike, BaseTheme, BaseSettings
 
 # Helper functions
 
-@docs getOptionIdString, wrapOption, asOptionSubId
+@docs getOptionIdString, wrapOption, asOptionSubId, hasOption, replaceOption
 
 # Low-level Data types and functions
 
 @docs MinimalStateLike, MinimalOptionLike, MinimalPaletteLike,
-MinimalPaletteOnLike, getOptionsWrapped,
+unwrapOption, MinimalPaletteOnLike, getOptionsWrapped,
 isSnapping, stopSnapping, hasCenterOption, setCenterOption, resetCenterOption,
-unsafeSetScrollCheckTime,
-defaultShadeAttrsWith, defaultBaseSettingsWith, Geom, getCenterPosAndLengthOfHelper,
-taskGetViewport, 
-toMilliPixel, fromMilliPixel, subscriptionsWithHelper
+unsafeSetScrollCheckTime, TwoDim, makeTwoDim,
+defaultShadeAttrsWith, defaultBaseSettingsWith, Geom,
+getCenterPosOf, getPosAndLengthAccessors,
+taskTriggerGetCenterOptionHelper, taskGetViewport, alwaysGotoOptionWithIdHelper,
+toMilliPixel, fromMilliPixel, viewAsElementHelper, subscriptionsWithHelper,
+animator
 
 # FIXME
 
@@ -171,7 +177,7 @@ type alias MinimalOptionLike optionWith vt msg
 
 {-| Option record for each item in the list from which user will choose.
 
-This record depends on the type of value and element (Element)
+This record depends on the type of value and element. (Element)
 -}
 type alias MinimalOption vt msg
     = MinimalOptionLike {} vt msg
@@ -179,7 +185,8 @@ type alias MinimalOption vt msg
 
 
 {-| A container for option types, which is useful when you try to
-put some option that has type of superset of `MinimalOptionLike`
+put some option which has type of superset of `MinimalOptionLike`.
+
 you can wrap it with [`wrapOption`](#wrapOption) unwrap with
 [`unwrapOption`](#unwrapOption)
 
@@ -212,19 +219,13 @@ unwrapOption (OptionItem option)
     = option
 
 
-{-| To distingusih between *full* dom id string and *sub* id string
-`OptionSubIdString` is used.
+{-| To distingusih between *full* dom id string and *sub* id string,
+`OptionSubIdString` is used for *sub* id string.
 
 please, use [`asOptionSubId`](#asOptionSubId) to wrap a string.
 -}
 type OptionSubId
     = OptionSubId String
-
-{-| not exported
--}
-type alias MessageMapper extraOpt vt msg
-    = String -> (Msg extraOpt vt msg) -> msg
-
 
 {-| Generally used when you [`setOptions`](#setOptions)
 -}
@@ -232,6 +233,13 @@ asOptionSubId : String -> OptionSubId
 asOptionSubId
     = OptionSubId
 
+
+{-| To export module message to your own message type, you can
+declare sub message contructor and hand it over to [`updateWith`](#updateWith),
+[`viewAsElement`](#viewAsElement) and etc.
+-}
+type alias MessageMapper extraOpt vt msg
+    = String -> (Msg extraOpt vt msg) -> msg
 
 {-| Picker direction
 -}
@@ -258,14 +266,14 @@ type alias Geom
       }
 
 
-{-| two dimensional value
+{-| For two dimensional value
 -}
 type alias TwoDim
     = { startPoint : Float
       , endPoint   : Float
       }
 
-{-| set TwoDim value to ensure that `startPoint` < `endPoint`
+{-| Set TwoDim value and ensure that `startPoint` < `endPoint`
 -}
 makeTwoDim : Float -> Float -> TwoDim
 makeTwoDim a b
@@ -278,23 +286,26 @@ makeTwoDim a b
           , endPoint   = a
           }
 
-{-| not exported
+{-| [`FindCenterOption`] normally has purpose to do something. To Centerise some
+item is most general purpose. So this type indicate what kind of data will be given when it is called.
+
 -}
 type alias OnSuccessFunction extraOpt vt msg
     = String -> Float -> Float -> Float ->
       Msg extraOpt vt msg
 
-{-| FIXME: export
+{-| Used for Animation status via [`elm-animator`][elm-animator]
 -}
 type SnapState
     = SnapIdle
     | Snapping
     | SnapFinished
 
+
 -- -- -- MODEL -- -- --
 
 {-| Provide Minimal model (or state) to work with. most of funciton in
-this module works well with your own record type generally, as
+this module works well with your own record type as
 more generic type constraint in function definition like:
 
 ```elm
@@ -313,7 +324,8 @@ As `MinimalStateLike` used, you can still use your own extended model.
 for example to use `getOptions` function with your own model looks like ...
 
 ```elm
-type alias YourModel vt msg = MinimalStateLike { extraField1 : String  } vt msg
+type alias YourModel vt msg =
+     MinimalStateLike { extraField1 : String  } vt msg
 
 yourModel
    = yourInitFunction
@@ -321,7 +333,6 @@ yourModel
 storedOptions
     = yourModel |> getOptions
 ```
-
 -}
 type alias MinimalState extraOpt vt msg
     = MinimalStateLike {} extraOpt vt msg
@@ -350,9 +361,10 @@ type alias MinimalStateLike stateWith extraOpt vt msg
       }
 
 
-{-| Msg chain generally covers the following steps
+{-| Msg chain generally covers the following steps.
 
-```
+
+``` ascii
 1. Detect any scroll which has delayed 'Cmd' to check
    whether scrolling is stopped or not.
 2. If scroll stopped, trigger snapping to nearst item.
@@ -364,6 +376,8 @@ type alias MinimalStateLike stateWith extraOpt vt msg
 
 Unfortunately we need own Msg here which means you might need to
 map over those message into your own Msg type.
+
+[`MessageMapper`](#MessageMapper) shows how it looks like.
 
 There are examples in this module regarding message mapping
 you could possibly search keyword 'messageMap' where I need to map the
@@ -435,12 +449,13 @@ type Error
     | UnknownError
 
 
-{-| a type for getting picker direction and end point (at the beginning or the
+{-| A type for getting picker direction and end point (at the beginning or the
 end) and give a list of Element.Attribute used in [`BaseTheme`](#BaseTheme)
 and partially used in defaultShadeAttrsWith.
 -}
 type alias ShadeAttrsFunction msg
     = Direction -> StartEnd -> List (Attribute msg)
+
 
 {-| Only some palette color are used in this module and this is minimum
 set of elements.
@@ -552,7 +567,7 @@ defaultShadeLengthWith pickerDirection
           Vertical ->
               Util.sizeScaled 8
 
-{-| and helper function for shade elm-ui attributes (List Element.Attribute)
+{-| And helper function for shade elm-ui attributes (List Element.Attribute)
 -}
 defaultShadeAttrsWith : (BaseThemeLike extraTheme
                              (MinimalPaletteLike palette
@@ -727,7 +742,7 @@ type alias StateUpdater extraStat extraOpt vt msg
       MinimalStateLike extraStat extraOpt vt msg
 
 
-{-| animator for animation
+{-| Animator for animation
 
 please read more here [`Wiring up the animation`](/packages/mdgriffith/elm-animator/1.1.1/Animator#wiring-up-the-animation)
 
@@ -750,8 +765,8 @@ animator
 
 -- -- -- Helper functions for user -- -- --
 
-{-| get position accessor and length accessor depends on the direction
-of picker
+{-| To get position accessor and length accessor depends on the direction
+of picker:
 
 ```elm
 ( posAccesssor, lengthAccessor )
@@ -769,7 +784,7 @@ getPosAndLengthAccessors pickerDirection
               ( .y, .height )
 
 
-{-| get a list of option as OptionItem
+{-| Get a list of option as OptionItem
 -}
 getOptionsWrapped : MinimalStateLike extraStat extraOpt vt msg ->
                     List (OptionItem extraOpt vt msg)
@@ -780,7 +795,7 @@ getOptionsWrapped { optionIds, optionIdToItemDict }
            |> List.filterMap identity
 
 
-{-| get a list of option record data from the whole options by searching
+{-| Get a list of option record data from the whole options by searching
 option ID in a Dict.
 
 The order of options in the same one of optionID list.
@@ -1390,13 +1405,6 @@ initMinimalState idString
             = Dict.empty
       , targetIdString
             = Nothing
-      {-
-      , pseudoAnimState
-            = initPseudoAnimState 0
-                -- ^ this is not actual Html Style elements
-                --   just for storing some animation status
-                --   `pos' is used for `Browser.Dom.setViewportOf'
-       -}
       , lastScrollClock
           = Time.millisToPosix 0
       , snapState

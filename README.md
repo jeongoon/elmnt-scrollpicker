@@ -323,9 +323,10 @@ main
 
 # Testing Environment
 
-- Firefox (currently 94.0.1) on Arch linux
+- Firefox (currently 96.0.2) on Arch linux
 - Vivaldi
 - [`Gnome Web Epiphany`](https://apps.gnome.org/en-GB/app/org.gnome.Epiphany/)
+- FF or Chrome on Galaxy Note 10
 
 I'm a chef and not a professional programmer but have been still using Linux
 since 2001. My 8 years old laptop can only run Linux smoothly.
@@ -336,12 +337,15 @@ your solution.
 
 
 # More Information
-**Why elm-style-animation?** [`elm-style-animation`](/packages/mdgriffith/elm-style-animation/latest)
-is not quite designed for low level animation. but you could use the module
-for any other css-style based animation. So you could possibly add other
-animation in your app without any additional module.
 
-[`elm-animation`](/packages/mgold/elm-animation/latest) was also considered,
-and *it is* pretty straight-foward.
-However the module cannot live together in the same application due to name
-colision.
+Initially I used [`elm-style-animation`][elm-style-animation-latest]
+before knowing the module [`elm-animator`][elm-animator-latest].
+
+`elm-animator` has more clear option for grab the value in lower level approach.
+
+But I still missed the days figuring out how to get the scroll position value
+from the `elm-style-animation`. 😅
+
+[elm-style-animation-latest]: /packages/mdgriffith/mdgriffith/elm-style-animation/latest
+[elm-animator-latest]: /packages/mdgriffith/mdgriffith/elm-animator/latest
+
