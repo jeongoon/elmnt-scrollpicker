@@ -1,13 +1,13 @@
 module Elmnt.BaseScrollPicker
-        exposing ( BasicOption
-                 , BasicOptionLike
+        exposing ( BaseOption
+                 , BaseOptionLike
                  , OptionItem
                  --, OptionSubId
                  , Direction (..)
                  , WhichViewport (..)
                  , StartEnd (..)
-                 , BasicState
-                 , BasicStateLike
+                 , BaseState
+                 , BaseStateLike
                  , Msg (..)
                  , Error (..)
                  , MinimalPaletteLike
@@ -29,7 +29,7 @@ module Elmnt.BaseScrollPicker
                  , unsafeSetScrollCheckTime
                  , getOptionIdString
                  , anyNewOptionSelected
-                 , initBasicState
+                 , initBaseState
                  , initCmdWith
                  , viewAsElement
                  , viewAsElementHelper
@@ -85,11 +85,11 @@ In result some pros are
 
 # Type
 
-@docs BasicState, BasicOption, OptionItem, Direction, StartEnd, Msg, Error
+@docs BaseState, BaseOption, OptionItem, Direction, StartEnd, Msg, Error
 
 # State(picker model) Creation, Modification and Query
 
-@docs initBasicState, setOptions, getOptions, setScrollStopCheckTime,
+@docs initBaseState, setOptions, getOptions, setScrollStopCheckTime,
 anyNewOptionSelected
 
 # Update
@@ -110,7 +110,7 @@ anyNewOptionSelected
 
 # Low-level Data types and functions
 
-@docs BasicStateLike, BasicOptionLike, MinimalPaletteLike,
+@docs BaseStateLike, BaseOptionLike, MinimalPaletteLike,
 MinimalPaletteOnLike, getOptionsWrapped,
 isSnapping, stopSnapping, hasCenterOption, setCenterOption, resetCenterOption,
 unsafeSetScrollCheckTime, scrollPosProperty, scrollPosPropertyName,
@@ -177,7 +177,7 @@ import Internal.VirtualViewport as Virtual
 
 {-| General prototype for option which has minimal set of fields
  -}
-type alias BasicOptionLike optionWith vt msg
+type alias BaseOptionLike optionWith vt msg
     = { optionWith |
         idString        : String
       , index           : Int
@@ -190,13 +190,13 @@ type alias BasicOptionLike optionWith vt msg
 
 This record depends on the type of value and element (Element)
 -}
-type alias BasicOption vt msg
-    = BasicOptionLike {} vt msg
+type alias BaseOption vt msg
+    = BaseOptionLike {} vt msg
                      -- ^ no extra option filed.
 
 
 {-| A container for option types, which is useful when you try to
-put some option that has type of superset of `BasicOptionLike`
+put some option that has type of superset of `BaseOptionLike`
 you can wrap it with [`wrapOption`](#wrapOption) unwrap with
 [`unwrapOption`](#unwrapOption)
 
@@ -216,13 +216,13 @@ you can wrap it with [`wrapOption`](#wrapOption) unwrap with
 ```
 -}
 type OptionItem optExtra vt msg
-    = OptionItem (BasicOptionLike optExtra vt msg)
+    = OptionItem (BaseOptionLike optExtra vt msg)
 
 
 {-| [`OptionItem`](#OptionItem) is an opaque type so you need
  wrapper and unwrapper
 -}
-wrapOption : BasicOptionLike optExtra vt msg ->
+wrapOption : BaseOptionLike optExtra vt msg ->
              OptionItem optExtra vt msg
 wrapOption option
     = OptionItem option
@@ -231,7 +231,7 @@ wrapOption option
 {-| unwrapper for [`OptionItem`](#OptionItem). this might be useuful only
 when you are making derived version of this module.
 -}
-unwrapOption : OptionItem optExtra vt msg -> BasicOptionLike optExtra vt msg
+unwrapOption : OptionItem optExtra vt msg -> BaseOptionLike optExtra vt msg
 unwrapOption (OptionItem option)
     = option
 
@@ -344,13 +344,13 @@ Even though one state value is used, I need to use Animation.style function
 to generate the state which can contain a lot more information
 
 -}
-type alias BasicState optExtra vt msg
-    = BasicStateLike {} optExtra vt msg
+type alias BaseState optExtra vt msg
+    = BaseStateLike {} optExtra vt msg
                     -- ^ {} : no extra state field.
 
 
 {-| Used for internal type checking -}
-type alias BasicStateLike statExtra optExtra vt msg
+type alias BaseStateLike statExtra optExtra vt msg
     = { statExtra |
         idString                : String
       , optionIds               : List String
@@ -431,7 +431,7 @@ type Msg optExtra vt msg
     | SetSnapToTargetOption     String Float Float Float
                                 --^ id, _  , start, rel pos
     | GotoTargetOption          String
-    | ScrollPickerSuccess       (BasicOptionLike optExtra vt msg)
+    | ScrollPickerSuccess       (BaseOptionLike optExtra vt msg)
     | ScrollPickerFailure       String String Error
     | Animate                   Animation.Msg
     | SetViewport               SelectedViewport MilliPixel
@@ -849,9 +849,9 @@ initPseudoAnimState
 
 
 {-| Helper type aliasing for changing some state -}
-type alias BasicStateUpdater statExtra optExtra vt msg
-    = BasicStateLike statExtra optExtra vt msg ->
-      BasicStateLike statExtra optExtra vt msg
+type alias BaseStateUpdater statExtra optExtra vt msg
+    = BaseStateLike statExtra optExtra vt msg ->
+      BaseStateLike statExtra optExtra vt msg
 
 
 -- -- -- Helper functions for user -- -- --
@@ -877,7 +877,7 @@ getPosAndLengthAccessors pickerDirection
 
 {-| get a list of option as OptionItem
 -}
-getOptionsWrapped : BasicStateLike statExtra optExtra vt msg ->
+getOptionsWrapped : BaseStateLike statExtra optExtra vt msg ->
                     List (OptionItem optExtra vt msg)
 getOptionsWrapped { optionIds, optionIdToItemDict }
     =  optionIds
@@ -893,8 +893,8 @@ option ID in a Dict.
 
 The order of options in the same one of optionID list.
 -}
-getOptions : BasicStateLike statExtra optExtra vt msg ->
-             List (BasicOptionLike optExtra vt msg)
+getOptions : BaseStateLike statExtra optExtra vt msg ->
+             List (BaseOptionLike optExtra vt msg)
 
 getOptions state
     = getOptionsWrapped state
@@ -922,7 +922,7 @@ this module still provides low-level api, so to make Option Item
           , element  = Element.none
           }
     in
-       initBasicState "myPicker"
+       initBaseState "myPicker"
           |> setOptions
              [ ( asOptionSubId "1", ScrollPicker.wrapOption
                      { emptyOption |
@@ -944,7 +944,7 @@ this module still provides low-level api, so to make Option Item
              ]
 -}
 setOptions : List ( OptionSubId, OptionItem optExtra vt msg ) ->
-             BasicStateUpdater statExtra optExtra vt msg
+             BaseStateUpdater statExtra optExtra vt msg
 
 setOptions subIdToOptionPairs state
     = let
@@ -992,7 +992,7 @@ setOptions subIdToOptionPairs state
 {-| check given option item is in the state.
 -}
 hasOption : OptionItem optExtra vt msg ->
-            BasicStateLike statExtra optExtra vt msg ->
+            BaseStateLike statExtra optExtra vt msg ->
             Bool
 hasOption (OptionItem option) state
     = state.optionIds
@@ -1005,7 +1005,7 @@ please use arrange your options
 and use [`setOptions`](#setOptions) manually.
 -}
 replaceOption : OptionItem optExtra vt msg ->
-                BasicStateUpdater statExtra optExtra vt msg
+                BaseStateUpdater statExtra optExtra vt msg
 
 replaceOption ((OptionItem option) as optionItem) state
     = if state
@@ -1086,7 +1086,7 @@ getOptionIdString pickerIdString (OptionSubId optionSubIdString)
 please check this [`Example`][example] to see how you could use of it.
 -}
 anyNewOptionSelected : Msg optExtra vt msg ->
-                       Maybe (BasicOptionLike optExtra vt msg)
+                       Maybe (BaseOptionLike optExtra vt msg)
 anyNewOptionSelected msg
     = case msg of
           ScrollPickerSuccess option ->
@@ -1099,7 +1099,7 @@ anyNewOptionSelected msg
 minimal testing function if the picker is snapping to some item
 at the moment
 -}
-isSnapping : BasicStateLike statExtra optExtra vt msg ->
+isSnapping : BaseStateLike statExtra optExtra vt msg ->
              Bool
 
 isSnapping state
@@ -1120,7 +1120,7 @@ will produce more animation after calling this function, so keep in mind
 that animation for snapping is not guaranteed to be done even if call this
 function in `model' part.
 -}
-stopSnapping : BasicStateUpdater statExtra optExtra vt msg
+stopSnapping : BaseStateUpdater statExtra optExtra vt msg
 stopSnapping state
     = { state |
         targetIdString
@@ -1136,7 +1136,7 @@ stopSnapping state
 
 {-| check if we already know which item is is near to the center
 -}
-hasCenterOption : BasicStateLike statExtra optExtra vt msg ->
+hasCenterOption : BaseStateLike statExtra optExtra vt msg ->
                   Bool
 hasCenterOption state
     = case state.optionIdInTheCenter of
@@ -1148,7 +1148,7 @@ hasCenterOption state
 {-| set the option as the nearest one to the center of frame
 -}
 setCenterOption : String -> Float -> Float ->
-                  BasicStateUpdater statExtra optExtra vt msg
+                  BaseStateUpdater statExtra optExtra vt msg
 
 setCenterOption centerOptionIdString basePos relPos state
     = { state |
@@ -1163,7 +1163,7 @@ setCenterOption centerOptionIdString basePos relPos state
 
 {-| reset the value for the option in the center
 -}
-resetCenterOption : BasicStateUpdater statExtra optExtra vt msg
+resetCenterOption : BaseStateUpdater statExtra optExtra vt msg
 resetCenterOption state
     = { state |
         optionIdInTheCenter
@@ -1172,7 +1172,7 @@ resetCenterOption state
 
 {-| test the picker is ready to get user scrolling input
  -}
-isPickerControlReady : BasicStateLike statExtra optExtra vt msg ->
+isPickerControlReady : BaseStateLike statExtra optExtra vt msg ->
                        Bool
 isPickerControlReady state
     = let numOfOptions
@@ -1184,7 +1184,7 @@ isPickerControlReady state
         numOfOptions == ( state.optionLengths |> List.length )
 
 
-resetPickerControl : BasicStateUpdater statExtra optExtra vt msg
+resetPickerControl : BaseStateUpdater statExtra optExtra vt msg
 resetPickerControl state
     = { state |
         optionLengths
@@ -1329,7 +1329,7 @@ alwaysGotoOptionWithIdHelper
       } ->
       String ->
       Maybe (Error -> msg) ->
-      BasicStateLike statExtra optExtra vt msg ->
+      BaseStateLike statExtra optExtra vt msg ->
       Task Never msg
 
 alwaysGotoOptionWithIdHelper appModel optionIdString mbErrorHandler state
@@ -1383,7 +1383,7 @@ alwaysGotoOptionWithIndexHelper
       } ->
       Int ->
       Maybe (Error -> msg) ->
-      BasicStateLike statExtra optExtra vt msg ->
+      BaseStateLike statExtra optExtra vt msg ->
       Task Never msg
 
 alwaysGotoOptionWithIndexHelper appModel optionIndex mbErrorHandler state
@@ -1451,20 +1451,20 @@ fromMilliPixel (MilliPixel mpInt)
           , element  = Element.none
           }
     in
-       initBasicState "myPicker"
+       initBaseState "myPicker"
           |> setOptions
              ...
 ```
 
 if you make another scroll picker
 based on this module, you might consider to use
-[`setInitBasicState`](#setInitBasicState) as well.
+[`setInitBaseState`](#setInitBaseState) as well.
 
 -}
-initBasicState : String ->
-                 BasicState optExtra vt msg
+initBaseState : String ->
+                 BaseState optExtra vt msg
 
-initBasicState idString
+initBaseState idString
     = let
         virtualControlSettings
             = Virtual.toSettings
@@ -1523,23 +1523,23 @@ initBasicState idString
              = OptionLengthUnknown
         }
 
-{-| this function shows a way to init your `BasicStateLike` model
-`initBasicState` value.
+{-| this function shows a way to init your `BaseStateLike` model
+`initBaseState` value.
 
 ```elm
 state
     = someEmptyYourStateLike
-    |> setInitBasicState
+    |> setInitBaseState
 
 ```
 
 -}
-resetInitBasicState : String ->
-                      (BasicStateLike statExtra optExtra vt msg) ->
-                      (BasicStateLike statExtra optExtra vt msg)
-resetInitBasicState idString state
+resetInitBaseState : String ->
+                      (BaseStateLike statExtra optExtra vt msg) ->
+                      (BaseStateLike statExtra optExtra vt msg)
+resetInitBaseState idString state
     = let basicSt
-              = initBasicState idString
+              = initBaseState idString
       in
           { state |
             idString                = basicSt.idString
@@ -1581,7 +1581,7 @@ asOptionSubId
 
 {-| `initCmdWith` will make picker choose the initial option you speicify
 with **sub** id string (not full id which you can access with .idString
-from [`BasicOptionLike`](#BasicOptionLike) after [`setOptions`](#setOptions)
+from [`BaseOptionLike`](#BaseOptionLike) after [`setOptions`](#setOptions)
 
 ```elm
 yourPickerState
@@ -1593,7 +1593,7 @@ initCmdWith : { appModelWith |
              , pickerDirection : Direction
              } ->
              OptionSubId->
-             (BasicStateLike statExtra optExtra vt msg) ->
+             (BaseStateLike statExtra optExtra vt msg) ->
              Cmd msg
 initCmdWith ({ messageMapWith } as appModel) optionSubId state
     = [ state
@@ -1634,7 +1634,7 @@ viewAsElement
       ( BaseThemeLike extraTheme (MinimalPaletteLike pal
                                   (MinimalPaletteOnLike palOn)) msg
       ) ->
-      BasicStateLike statExtra optExtra vt msg ->
+      BaseStateLike statExtra optExtra vt msg ->
       Element msg
 
 viewAsElement appModel theme state
@@ -1664,7 +1664,7 @@ viewAsElementHelper
                                   (MinimalPaletteOnLike palOn)) msg
       ) ->
       (Maybe (List (Element msg))) ->
-      BasicStateLike statExtra optExtra vt msg ->
+      BaseStateLike statExtra optExtra vt msg ->
       Element msg
 
 viewAsElementHelper { messageMapWith, pickerDirection }
@@ -1886,8 +1886,8 @@ updateWith : { appModel |
                                              (MinimalPaletteOnLike palOn)) msg
              ) ->
              Msg optExtra vt msg ->
-             BasicStateLike statExtra optExtra vt msg ->
-             ( BasicStateLike statExtra optExtra vt msg
+             BaseStateLike statExtra optExtra vt msg ->
+             ( BaseStateLike statExtra optExtra vt msg
              , Cmd msg
              )
 
@@ -2811,7 +2811,7 @@ subscription (Sub msg).
 
 **Important:** no animation will work without subscriptions!!!
 -}
-subscriptionsWith : List (BasicStateLike statExtra optExtra vt msg) ->
+subscriptionsWith : List (BaseStateLike statExtra optExtra vt msg) ->
                     { model |
                       messageMapWith : (String -> (Msg optExtra vt msg) -> msg)
                     } ->
