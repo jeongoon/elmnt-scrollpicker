@@ -42,14 +42,9 @@ module Elmnt.MinimalScrollPicker
                  , hasCenterOption
                  , setCenterOption
                  , resetCenterOption
-                 --, initPseudoAnimStateHelper
-                 --, initPseudoAnimState
-                 --, defaultShadeLengthWith
                  , animator
                  , defaultShadeAttrsWith
                  , defaultBaseSettingsWith
-                 --, scrollPosPropertyName
-                 --, scrollPosProperty
                  , getOptionsWrapped
                  , Geom
                  , TwoDim
